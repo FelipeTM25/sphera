@@ -27,10 +27,16 @@ export interface LevelDef {
 }
 
 export type TrackPiece =
-  | { kind: 'solid'; segments: number; angle: number }
+  | { kind: 'solid'; segments: number; angle: number; widthMultiplier?: number }
   | { kind: 'gap'; segments: number }
 
-export type ObstacleType = 'wall' | 'pillar' | 'gate'
+// wall: tall wall blocking half the track (dodge left/right)
+// pillar: single column in the middle or side (dodge)
+// gate: partial opening you pass through (aim for gap)
+// low_wall: low barrier spanning full width (JUMP over it)
+// ramp: angled ramp before a gap (gives upward boost)
+// barrier: half-width side barrier (hug the other side)
+export type ObstacleType = 'wall' | 'pillar' | 'gate' | 'low_wall' | 'ramp' | 'barrier'
 
 export interface ObstacleDef {
   id: string
@@ -56,38 +62,74 @@ export const LEVELS: LevelDef[] = [
     title: 'Principiante',
     difficultyLabel: 'Dificultad: Fácil',
     speed: 14,
-    baseSpeed: 30,
-    maxSpeed: 60,
-    acceleration: 0.50,
+    baseSpeed: 28,
+    maxSpeed: 52,
+    acceleration: 0.40,
     trackWidth: 9,
     segmentLength: 14,
     segmentDepth: 1.0,
     start: { x: 0, y: 4, z: 2 },
+    // Timeline key (cumulative, gaps count):
+    //  0-3   intro flat, full
+    //  4-7   gentle slope, full
+    //  8-10  slope, full | GAP 11
+    //  12-15 slope, full | GAP 16
+    //  17-20 NARROW 0.5x | 21-23 NARROW 0.5x
+    //  24-25 full | GAP 26
+    //  27-30 full | 31-34 NARROW 0.5x | GAP 35
+    //  36-38 full | GAP 39
+    //  40-44 full | 45-50 full (finish)
     pieces: [
-      { kind: 'solid', segments: 8, angle: 0 },
-      { kind: 'solid', segments: 3, angle: 0.12 },
-      { kind: 'solid', segments: 4, angle: 0 },
-      { kind: 'solid', segments: 2, angle: -0.10 },
-      // Small jump
-      { kind: 'solid', segments: 2, angle: 0.16 },
-      { kind: 'gap', segments: 1 },
-      { kind: 'solid', segments: 3, angle: -0.08 },
-      { kind: 'solid', segments: 10, angle: 0 },
+      { kind: 'solid', segments: 4, angle: 0.00 },                           // seg 0-3  intro
+      { kind: 'solid', segments: 4, angle: 0.06 },                           // seg 4-7
+      { kind: 'solid', segments: 3, angle: 0.09 },                           // seg 8-10
+      { kind: 'gap',   segments: 1 },                                        // GAP 11 ← jump 1
+      { kind: 'solid', segments: 4, angle: 0.07 },                           // seg 12-15
+      { kind: 'gap',   segments: 1 },                                        // GAP 16 ← jump 2
+      { kind: 'solid', segments: 4, angle: 0.10, widthMultiplier: 0.5 },    // seg 17-20 NARROW
+      { kind: 'solid', segments: 3, angle: 0.08, widthMultiplier: 0.5 },    // seg 21-23 NARROW
+      { kind: 'solid', segments: 2, angle: 0.10 },                           // seg 24-25 full
+      { kind: 'gap',   segments: 1 },                                        // GAP 26 ← jump 3
+      { kind: 'solid', segments: 4, angle: 0.11 },                           // seg 27-30
+      { kind: 'solid', segments: 4, angle: 0.09, widthMultiplier: 0.5 },    // seg 31-34 NARROW
+      { kind: 'gap',   segments: 1 },                                        // GAP 35 ← jump 4
+      { kind: 'solid', segments: 3, angle: 0.12 },                           // seg 36-38
+      { kind: 'gap',   segments: 1 },                                        // GAP 39 ← jump 5
+      { kind: 'solid', segments: 5, angle: 0.08 },                           // seg 40-44
+      { kind: 'solid', segments: 6, angle: 0.05 },                           // seg 45-50 finish
     ],
+    // Obstacles — x values scaled for section width (narrow = ±2.0 max, full = ±2.8)
     obstacles: [
-      { id: 'l1-wall-1', type: 'wall', segmentIndex: 6, x: 1.6 },
-      { id: 'l1-pillar-1', type: 'pillar', segmentIndex: 12, x: -2.0 },
-      // segmentIndex 19 is a gap in this layout; move to the next solid segment.
-      { id: 'l1-gate-1', type: 'gate', segmentIndex: 20, x: 0 },
-      // extra obstacles so level 1 isn't too easy
-      { id: 'l1-wall-2', type: 'wall', segmentIndex: 9, x: -1.8 },
-      { id: 'l1-pillar-2', type: 'pillar', segmentIndex: 15, x: 2.2 },
-      { id: 'l1-gate-2', type: 'gate', segmentIndex: 24, x: -1.6 },
+      // Zone intro/full
+      { id: 'l1-barrier-1', type: 'barrier',  segmentIndex: 2,  x:  2.8 },
+      { id: 'l1-wall-1',    type: 'wall',     segmentIndex: 4,  x: -1.8 },
+      { id: 'l1-lowwall-1', type: 'low_wall', segmentIndex: 7,  x:  0.0 },  // jump! 4 segs before gap 11
+      // After gap 11, full width
+      { id: 'l1-pillar-1',  type: 'pillar',   segmentIndex: 12, x: -2.2 },
+      { id: 'l1-gate-1',    type: 'gate',     segmentIndex: 14, x:  1.8 },
+      { id: 'l1-lowwall-2', type: 'low_wall', segmentIndex: 13, x:  0.0 },  // jump! 3 segs before gap 16
+      // NARROW section 17-23 (width 4.5 → half = ±2.25, safe x: ±1.5)
+      { id: 'l1-barrier-2', type: 'barrier',  segmentIndex: 17, x:  1.5 },  // narrow barrier
+      { id: 'l1-pillar-2',  type: 'pillar',   segmentIndex: 19, x: -0.8 },  // narrow pillar
+      { id: 'l1-lowwall-3', type: 'low_wall', segmentIndex: 21, x:  0.0 },  // narrow low_wall (4 segs before gap 26)
+      // Full section 27-30
+      { id: 'l1-wall-2',    type: 'wall',     segmentIndex: 27, x:  1.6 },
+      { id: 'l1-gate-2',    type: 'gate',     segmentIndex: 29, x: -1.8 },
+      // NARROW section 31-34 (safe x: ±1.5)
+      { id: 'l1-pillar-3',  type: 'pillar',   segmentIndex: 31, x:  0.8 },
+      { id: 'l1-lowwall-4', type: 'low_wall', segmentIndex: 32, x:  0.0 },  // jump! 3 segs before gap 35
+      // Full section 36-38, then gap 39
+      { id: 'l1-wall-3',    type: 'wall',     segmentIndex: 36, x: -1.6 },
+      { id: 'l1-barrier-3', type: 'barrier',  segmentIndex: 37, x:  2.8 },
+      // Final stretch 40-50
+      { id: 'l1-pillar-4',  type: 'pillar',   segmentIndex: 41, x:  2.0 },
+      { id: 'l1-gate-3',    type: 'gate',     segmentIndex: 45, x:  1.8 },
+      { id: 'l1-barrier-4', type: 'barrier',  segmentIndex: 48, x: -2.8 },
     ],
     stars: [
-      { id: 'l1-star-1', segmentIndex: 5, x: -1.8, yOffset: 1.4 },
-      { id: 'l1-star-2', segmentIndex: 13, x: 0.0, yOffset: 1.6 },
-      { id: 'l1-star-3', segmentIndex: 22, x: 1.8, yOffset: 1.4 },
+      { id: 'l1-star-1', segmentIndex: 9,  x: -2.0, yOffset: 1.2 },  // zone 3 full, left
+      { id: 'l1-star-2', segmentIndex: 22, x:  0.0, yOffset: 1.2 },  // narrow center
+      { id: 'l1-star-3', segmentIndex: 47, x:  2.0, yOffset: 1.2 },  // final stretch
     ],
   },
   {

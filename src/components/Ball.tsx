@@ -16,8 +16,8 @@ interface BallProps {
 
 // ─── Tuning ──────────────────────────────────────────────────────────────────
 const GRAVITY = 45          // units/sec²
-const LATERAL_ACCEL = 110    // lateral acceleration (units/sec²)
-const LATERAL_DAMPING = 0.82 // applied each frame to lateral velocity
+const LATERAL_ACCEL = 165    // lateral acceleration (units/sec²) — 50% faster than before
+const LATERAL_DAMPING = 0.86 // higher damping lets lateral speed accumulate more
 const BALL_RADIUS = 0.5
 const GROUND_TOLERANCE = 0.18  // how close to floor = "on ground" (absorbs 1 frame of fall)
 const RAY_FAR = 80             // long enough for any drop height
@@ -114,18 +114,11 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     pos.y += vel.y * dt
     pos.z -= fwd * dt  // forward always negative Z
 
-    // 5. Track boundary clamping
-    const halfWidth = level.trackWidth * 0.5
-    pos.x = Math.max(-halfWidth, Math.min(halfWidth, pos.x))
-    if (pos.x === -halfWidth || pos.x === halfWidth) vel.x = 0
+    // 5. No lateral clamping — ball can fall off the edges naturally
 
     // 6. Floor detection via downward raycast at the NEW position
     // Ray starts well above the ball to avoid tunneling if it falls very fast
-    _rayOrigin.set(
-      Math.max(-halfWidth + 0.05, Math.min(halfWidth - 0.05, pos.x)), 
-      pos.y + 10, 
-      pos.z
-    )
+    _rayOrigin.set(pos.x, pos.y + 10, pos.z)
     _raycaster.set(_rayOrigin, _rayDir)
     _raycaster.far = RAY_FAR
 
@@ -215,9 +208,9 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       }
     }
 
-    // 9. Death: fell off
+    // 9. Death: fell off track (Y only — no lateral boundary, ball can fall off edges)
     if (aliveTimer.current > 0.8) {
-      if (pos.y < -20 || Math.abs(pos.x) > level.trackWidth * 0.5 + 3) {
+      if (pos.y < -25) {
         if (!deadRef.current) {
           deadRef.current = true
           endGame()

@@ -15,12 +15,196 @@ interface TrackProps {
   obstacleMeshes: React.MutableRefObject<THREE.Mesh[]>
 }
 
-function obstacleSizeFor(level: LevelDef, def: ObstacleDef): [number, number, number] {
+function obstacleSizeFor(level: LevelDef, def: ObstacleDef, segmentWidth: number): [number, number, number] {
   if (def.size) return [def.size.w, def.size.h, def.size.d]
-  if (def.type === 'pillar') return [1.1, 2.0, 1.1]
-  if (def.type === 'gate') return [1.2, 1.1, 0.7]
-  // wall
-  return [level.trackWidth * 0.55, 1.1, 0.7]
+  switch (def.type) {
+    case 'pillar':   return [1.1, 2.2, 1.1]
+    case 'gate':     return [1.4, 1.2, 0.7]
+    case 'low_wall': return [segmentWidth * 0.95, 0.6, 0.85]  // spans actual segment width
+    case 'ramp':     return [segmentWidth * 0.55, 0.75, 2.8]
+    case 'barrier':  return [segmentWidth * 0.48, 1.8, 0.75]
+    default:         return [level.trackWidth * 0.55, 1.1, 0.7]   // wall: always half full width
+  }
+}
+
+// ── Star shape helper ─────────────────────────────────────────────────────────
+function createStarShape(outerR: number, innerR: number, points: number): THREE.Shape {
+  const shape = new THREE.Shape()
+  const step = Math.PI / points
+  for (let i = 0; i < points * 2; i++) {
+    const angle = i * step - Math.PI / 2
+    const r = i % 2 === 0 ? outerR : innerR
+    const x = Math.cos(angle) * r
+    const y = Math.sin(angle) * r
+    if (i === 0) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
+  }
+  shape.closePath()
+  return shape
+}
+
+const _starShape = createStarShape(0.38, 0.16, 5)
+const _starExtrudeSettings: THREE.ExtrudeGeometryOptions = {
+  depth: 0.14,
+  bevelEnabled: true,
+  bevelThickness: 0.04,
+  bevelSize: 0.03,
+  bevelSegments: 2,
+}
+
+// Reusable star geometry (created once)
+const STAR_GEO = new THREE.ExtrudeGeometry(_starShape, _starExtrudeSettings)
+STAR_GEO.center()
+STAR_GEO.computeBoundingSphere()
+
+// ── Finish arch helpers ───────────────────────────────────────────────────────
+// Checkerboard pattern for finish flag using canvas texture
+function makeCheckerTexture(cols: number, rows: number, cellSize = 32): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = cols * cellSize
+  canvas.height = rows * cellSize
+  const ctx = canvas.getContext('2d')!
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#111111'
+      ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize)
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.needsUpdate = true
+  return tex
+}
+
+const CHECKER_TEX = makeCheckerTexture(8, 4)
+
+// ── Star component (animated rotation) ───────────────────────────────────────
+function Star3D({ position, index }: { position: THREE.Vector3; index: number }) {
+  const groupRef = useRef<THREE.Group>(null!)
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 1.8
+      groupRef.current.rotation.z += delta * 0.4
+    }
+  })
+
+  // Stagger initial rotation per star
+  const initRotY = (index * Math.PI * 2) / 3
+
+  return (
+    <group
+      ref={groupRef}
+      position={[position.x, position.y, position.z]}
+      rotation={[0, initRotY, 0]}
+    >
+      {/* Main star body */}
+      <mesh geometry={STAR_GEO} castShadow>
+        <meshStandardMaterial
+          color="#ffd700"
+          emissive="#ffaa00"
+          emissiveIntensity={1.6}
+          metalness={0.3}
+          roughness={0.2}
+        />
+      </mesh>
+      {/* Inner bright core */}
+      <mesh geometry={STAR_GEO} scale={0.6}>
+        <meshBasicMaterial color="#fffacd" />
+      </mesh>
+      {/* Outer glow shell — compensates visually for removed pointLight */}
+      <mesh geometry={STAR_GEO} scale={2.0}>
+        <meshBasicMaterial color="#ffd700" transparent opacity={0.13} side={THREE.BackSide} />
+      </mesh>
+    </group>
+  )
+}
+
+// ── Finish arch component (animated) ─────────────────────────────────────────
+function FinishArch({
+  width,
+  y,
+  z,
+}: {
+  width: number
+  y: number
+  z: number
+}) {
+  const pulsRef = useRef<THREE.MeshStandardMaterial>(null!)
+  const flagRef = useRef<THREE.Group>(null!)
+
+  useFrame(({ clock }) => {
+    // Pulse the crossbar emissive
+    if (pulsRef.current) {
+      pulsRef.current.emissiveIntensity = 0.5 + Math.sin(clock.elapsedTime * 3) * 0.3
+    }
+    // Gentle flag wave (oscillate Y rotation)
+    if (flagRef.current) {
+      flagRef.current.rotation.y = Math.sin(clock.elapsedTime * 2.5) * 0.18
+    }
+  })
+
+  const postH = 4.5
+  const postR = 0.22
+  const crossbarH = 0.45
+  const halfW = width / 2
+
+  return (
+    <group position={[0, y, z]}>
+      {/* Left post */}
+      <mesh position={[-halfW, postH / 2 - 0.5, 0]} castShadow>
+        <cylinderGeometry args={[postR, postR + 0.05, postH, 16]} />
+        <meshStandardMaterial color="#e8e8e8" metalness={0.9} roughness={0.15} />
+      </mesh>
+      {/* Right post */}
+      <mesh position={[halfW, postH / 2 - 0.5, 0]} castShadow>
+        <cylinderGeometry args={[postR, postR + 0.05, postH, 16]} />
+        <meshStandardMaterial color="#e8e8e8" metalness={0.9} roughness={0.15} />
+      </mesh>
+
+      {/* Crossbar */}
+      <mesh position={[0, postH - 0.5, 0]} castShadow>
+        <boxGeometry args={[width + postR * 2, crossbarH, postR * 2]} />
+        <meshStandardMaterial
+          ref={pulsRef}
+          color="#ffffff"
+          emissive="#00f5ff"
+          emissiveIntensity={0.5}
+          metalness={0.7}
+          roughness={0.2}
+        />
+      </mesh>
+
+      {/* Checkerboard flag banner hanging below crossbar */}
+      <group ref={flagRef} position={[0, postH - 1.2, 0.15]}>
+        <mesh>
+          <planeGeometry args={[width * 0.82, 1.4]} />
+          <meshStandardMaterial
+            map={CHECKER_TEX}
+            side={THREE.DoubleSide}
+            metalness={0.0}
+            roughness={0.8}
+          />
+        </mesh>
+      </group>
+
+      {/* "META" label — thin glowing strip */}
+      <mesh position={[0, postH + 0.35, 0]}>
+        <boxGeometry args={[2.4, 0.5, 0.1]} />
+        <meshStandardMaterial
+          color="#00f5ff"
+          emissive="#00f5ff"
+          emissiveIntensity={1.5}
+          metalness={0.5}
+          roughness={0.2}
+        />
+      </mesh>
+
+      {/* Ambient point lights to illuminate the arch */}
+      <pointLight position={[0, postH, 1]} color="#00f5ff" intensity={2.5} distance={14} />
+      <pointLight position={[-halfW, 1, 0]} color="#ffffff" intensity={0.8} distance={8} />
+      <pointLight position={[halfW, 1, 0]} color="#ffffff" intensity={0.8} distance={8} />
+    </group>
+  )
 }
 
 function buildLevelLayout(level: LevelDef) {
@@ -41,6 +225,9 @@ function buildLevelLayout(level: LevelDef) {
       continue
     }
 
+    const wm = piece.widthMultiplier ?? 1
+    const segW = W * wm
+
     for (let i = 0; i < piece.segments; i++) {
       const angle = piece.angle
       const dz = L * Math.sin(angle)
@@ -51,7 +238,7 @@ function buildLevelLayout(level: LevelDef) {
       const seg: SegmentDef = {
         id: `seg-${level.id}-${timelineIndex}`,
         position: [0, centerY, centerZ],
-        size: [W, D, L],
+        size: [segW, D, L],
         rotation: [angle, 0, 0],
         colorIndex: colorIdx++,
       }
@@ -70,7 +257,8 @@ function buildLevelLayout(level: LevelDef) {
     .map((def) => {
       const seg = solidByTimelineIndex.get(def.segmentIndex)
       if (!seg) return null
-      const size = obstacleSizeFor(level, def)
+      const segmentWidth = seg.size[0]  // actual width (respects widthMultiplier)
+      const size = obstacleSizeFor(level, def, segmentWidth)
       const y = seg.position[1] + level.segmentDepth / 2 + size[1] / 2 + 0.05
       return {
         id: def.id,
@@ -165,40 +353,24 @@ export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: Trac
           position={obs.position}
           size={obs.size}
           type={obs.type}
-          onMeshReady={onObstacleMeshReady}
-          onMeshRemoved={onObstacleMeshRemoved}
+          // Ramps are visual-only: rotated box geometry breaks AABB collision,
+          // and ramps are meant to launch the ball, not kill it.
+          onMeshReady={obs.type === 'ramp' ? undefined : onObstacleMeshReady}
+          onMeshRemoved={obs.type === 'ramp' ? undefined : onObstacleMeshRemoved}
         />
       ))}
 
-      {/* Stars (visual only; collection is distance-based) */}
+      {/* Stars — 3D 5-point star geometry with rotation animation */}
       {(gameState === 'playing' || gameState === 'levelComplete') && stars.map((s) =>
         runCollectedStars[s.index]
           ? null
-          : (
-            <group key={s.id} position={[s.position.x, s.position.y, s.position.z]}>
-              <mesh>
-                <icosahedronGeometry args={[0.35, 0]} />
-                <meshStandardMaterial color="#ffe680" emissive="#ffcc33" emissiveIntensity={1.2} metalness={0.2} roughness={0.3} />
-              </mesh>
-              <mesh scale={1.8}>
-                <icosahedronGeometry args={[0.35, 0]} />
-                <meshBasicMaterial color="#ffe680" transparent opacity={0.08} side={THREE.BackSide} />
-              </mesh>
-            </group>
-          )
+          : <Star3D key={s.id} position={s.position} index={s.index} />
       )}
 
-      {/* Finish gate (visual) */}
-      <group position={[0, finishY, finishZ]}>
-        <mesh>
-          <boxGeometry args={[level.trackWidth * 0.85, 2.2, 0.35]} />
-          <meshStandardMaterial color="#d9f3ff" emissive="#00f5ff" emissiveIntensity={0.35} metalness={0.6} roughness={0.25} />
-        </mesh>
-        <mesh scale={[1.08, 1.15, 1.2]}>
-          <boxGeometry args={[level.trackWidth * 0.85, 2.2, 0.35]} />
-          <meshBasicMaterial color="#00f5ff" transparent opacity={0.06} side={THREE.BackSide} />
-        </mesh>
-      </group>
+      {/* Finish arch — visible during play and on level complete */}
+      {(gameState === 'playing' || gameState === 'levelComplete') && (
+        <FinishArch width={level.trackWidth * 0.9} y={finishY} z={finishZ} />
+      )}
     </group>
   )
 }
