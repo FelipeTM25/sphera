@@ -4,8 +4,12 @@ export interface LevelDef {
   id: LevelId
   title: string
   difficultyLabel: string
-  // Forward speed (units/sec). Higher = harder.
+  // Legacy speed kept for jump-zone calculations.
   speed: number
+  // Progressive speed system
+  baseSpeed: number    // Starting speed (units/sec)
+  maxSpeed: number     // Top speed the ball can reach
+  acceleration: number // Speed gain per second
   // Track surface width.
   trackWidth: number
   // Segment length along Z.
@@ -52,6 +56,9 @@ export const LEVELS: LevelDef[] = [
     title: 'Principiante',
     difficultyLabel: 'Dificultad: Fácil',
     speed: 14,
+    baseSpeed: 30,
+    maxSpeed: 60,
+    acceleration: 0.50,
     trackWidth: 9,
     segmentLength: 14,
     segmentDepth: 1.0,
@@ -88,6 +95,9 @@ export const LEVELS: LevelDef[] = [
     title: 'Intermedio',
     difficultyLabel: 'Dificultad: Medio',
     speed: 18,
+    baseSpeed: 35,
+    maxSpeed: 70,
+    acceleration: 0.70,
     trackWidth: 8.5,
     segmentLength: 14,
     segmentDepth: 1.0,
@@ -129,6 +139,9 @@ export const LEVELS: LevelDef[] = [
     title: 'Experto',
     difficultyLabel: 'Dificultad: Difícil',
     speed: 22,
+    baseSpeed: 40,
+    maxSpeed: 80,
+    acceleration: 3.5,
     trackWidth: 7.5,
     segmentLength: 14,
     segmentDepth: 1.0,

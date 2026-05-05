@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { TrackSegment, type SegmentDef } from './TrackSegment'
@@ -9,6 +9,10 @@ import type { LevelDef, ObstacleDef } from '../levels'
 interface TrackProps {
   level: LevelDef
   ballPosition: React.MutableRefObject<THREE.Vector3>
+  /** Out-ref: filled with floor mesh refs for ball raycasting */
+  trackMeshes: React.MutableRefObject<THREE.Mesh[]>
+  /** Out-ref: filled with obstacle mesh refs for ball collision */
+  obstacleMeshes: React.MutableRefObject<THREE.Mesh[]>
 }
 
 function obstacleSizeFor(level: LevelDef, def: ObstacleDef): [number, number, number] {
@@ -95,7 +99,7 @@ function buildLevelLayout(level: LevelDef) {
   return { segments, obstacles, stars, finishZ, finishY }
 }
 
-export function Track({ level, ballPosition }: TrackProps) {
+export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: TrackProps) {
   const { gameState, runCollectedStars, collectStar, completeLevel } = useGame()
   const { segments, obstacles, stars, finishZ, finishY } = useMemo(() => buildLevelLayout(level), [level])
   const didCompleteRef = useRef(false)
@@ -103,6 +107,27 @@ export function Track({ level, ballPosition }: TrackProps) {
   useEffect(() => {
     didCompleteRef.current = false
   }, [gameState, level.id])
+
+  // ── Mesh registry callbacks ────────────────────────────────────────────────
+  const onTrackMeshReady = useCallback((mesh: THREE.Mesh) => {
+    trackMeshes.current.push(mesh)
+  }, [trackMeshes])
+
+  const onTrackMeshRemoved = useCallback((mesh: THREE.Mesh) => {
+    const idx = trackMeshes.current.indexOf(mesh)
+    if (idx !== -1) trackMeshes.current.splice(idx, 1)
+  }, [trackMeshes])
+
+  const onObstacleMeshReady = useCallback((mesh: THREE.Mesh) => {
+    obstacleMeshes.current.push(mesh)
+  }, [obstacleMeshes])
+
+  const onObstacleMeshRemoved = useCallback((mesh: THREE.Mesh) => {
+    const idx = obstacleMeshes.current.indexOf(mesh)
+    if (idx !== -1) obstacleMeshes.current.splice(idx, 1)
+  }, [obstacleMeshes])
+
+  // Registries are cleared by TrackSegment/Obstacle unmounts.
 
   useFrame(() => {
     if (gameState !== 'playing') return
@@ -126,15 +151,27 @@ export function Track({ level, ballPosition }: TrackProps) {
   return (
     <group>
       {segments.map((seg) => (
-        <TrackSegment key={seg.id} seg={seg} />
+        <TrackSegment
+          key={seg.id}
+          seg={seg}
+          onMeshReady={onTrackMeshReady}
+          onMeshRemoved={onTrackMeshRemoved}
+        />
       ))}
 
       {(gameState === 'playing' || gameState === 'levelComplete') && obstacles.map((obs) => (
-        <Obstacle key={obs.id} position={obs.position} size={obs.size} type={obs.type} />
+        <Obstacle
+          key={obs.id}
+          position={obs.position}
+          size={obs.size}
+          type={obs.type}
+          onMeshReady={onObstacleMeshReady}
+          onMeshRemoved={onObstacleMeshRemoved}
+        />
       ))}
 
       {/* Stars (visual only; collection is distance-based) */}
-      {(gameState === 'playing' || gameState === 'levelComplete') && stars.map((s) => (
+      {(gameState === 'playing' || gameState === 'levelComplete') && stars.map((s) =>
         runCollectedStars[s.index]
           ? null
           : (
@@ -149,7 +186,7 @@ export function Track({ level, ballPosition }: TrackProps) {
               </mesh>
             </group>
           )
-      ))}
+      )}
 
       {/* Finish gate (visual) */}
       <group position={[0, finishY, finishZ]}>

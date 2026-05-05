@@ -1,4 +1,5 @@
-import { useBox } from '@react-three/cannon'
+import { useRef, useEffect } from 'react'
+import * as THREE from 'three'
 
 export interface SegmentDef {
   id: string
@@ -15,20 +16,29 @@ const TRACK_COLORS = [
   { base: '#0a1f1a', edge: '#00ffaa' },
 ]
 
-export function TrackSegment({ seg }: { seg: SegmentDef }) {
-  useBox(() => ({
-    type: 'Static' as const,
-    position: seg.position,
-    rotation: seg.rotation,
-    args: seg.size,
-  }))
+interface TrackSegmentProps {
+  seg: SegmentDef
+  onMeshReady?: (mesh: THREE.Mesh) => void
+  onMeshRemoved?: (mesh: THREE.Mesh) => void
+}
+
+export function TrackSegment({ seg, onMeshReady, onMeshRemoved }: TrackSegmentProps) {
+  const meshRef = useRef<THREE.Mesh>(null!)
+
+  useEffect(() => {
+    const mesh = meshRef.current
+    if (mesh) onMeshReady?.(mesh)
+    return () => {
+      if (mesh) onMeshRemoved?.(mesh)
+    }
+  }, [onMeshReady, onMeshRemoved])
 
   const color = TRACK_COLORS[seg.colorIndex % 4]
   const [w, h, d] = seg.size
 
   return (
     <group position={seg.position} rotation={seg.rotation}>
-      <mesh receiveShadow>
+      <mesh ref={meshRef} receiveShadow>
         <boxGeometry args={seg.size} />
         <meshStandardMaterial color={color.base} metalness={0.3} roughness={0.7} />
       </mesh>

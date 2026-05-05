@@ -1,26 +1,30 @@
-import { useBox } from '@react-three/cannon'
+import { useRef, useEffect } from 'react'
 import * as THREE from 'three'
 
 interface ObstacleProps {
   position: [number, number, number]
   size: [number, number, number]
   type: 'wall' | 'pillar' | 'gate'
+  onMeshReady?: (mesh: THREE.Mesh) => void
+  onMeshRemoved?: (mesh: THREE.Mesh) => void
 }
 
-export function Obstacle({ position, size, type }: ObstacleProps) {
-  useBox(() => ({
-    type: 'Static',
-    position,
-    args: size,
-    isTrigger: false,
-    userData: { kind: 'obstacle', lethal: true, obstacleType: type },
-  }))
+export function Obstacle({ position, size, type, onMeshReady, onMeshRemoved }: ObstacleProps) {
+  const meshRef = useRef<THREE.Mesh>(null!)
+
+  useEffect(() => {
+    const mesh = meshRef.current
+    if (mesh) onMeshReady?.(mesh)
+    return () => {
+      if (mesh) onMeshRemoved?.(mesh)
+    }
+  }, [onMeshReady, onMeshRemoved])
 
   const color = type === 'gate' ? '#ff6600' : '#ff2020'
 
   return (
     <group position={position}>
-      <mesh castShadow>
+      <mesh ref={meshRef} castShadow>
         <boxGeometry args={size} />
         <meshStandardMaterial
           color={color}

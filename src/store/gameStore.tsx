@@ -56,6 +56,7 @@ interface GameStore {
   unlockedMaxLevelId: LevelId
   runCollectedStars: boolean[] // length 3
   bestStarsByLevel: Record<LevelId, number>
+  currentSpeed: number
 
   currentLevel: ReturnType<typeof getLevelById>
 
@@ -68,6 +69,7 @@ interface GameStore {
   endGame: () => void
   completeLevel: () => void
   collectStar: (index: number) => void
+  updateSpeed: (speed: number) => void
 }
 
 const GameContext = createContext<GameStore | null>(null)
@@ -79,6 +81,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [unlockedMaxLevelId, setUnlockedMaxLevelId] = useState<LevelId>(persisted?.unlockedMaxLevelId ?? 1)
   const [runCollectedStars, setRunCollectedStars] = useState<boolean[]>([false, false, false])
   const [bestStarsByLevel, setBestStarsByLevel] = useState<Record<LevelId, number>>(persisted?.bestStarsByLevel ?? ({ 1: 0, 2: 0, 3: 0 } as Record<LevelId, number>))
+  const [currentSpeed, setCurrentSpeed] = useState(0)
 
   const currentLevel = useMemo(() => getLevelById(currentLevelId), [currentLevelId])
 
@@ -117,7 +120,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const endGame = useCallback(() => {
+    setCurrentSpeed(0)
     setGameState('gameOver')
+  }, [])
+
+  const updateSpeed = useCallback((speed: number) => {
+    setCurrentSpeed(Math.round(speed))
   }, [])
 
   const completeLevel = useCallback(() => {
@@ -151,6 +159,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       unlockedMaxLevelId,
       runCollectedStars,
       bestStarsByLevel,
+      currentSpeed,
       currentLevel,
       goHome,
       openLevels,
@@ -161,6 +170,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       endGame,
       completeLevel,
       collectStar,
+      updateSpeed,
     }}>
       {children}
     </GameContext.Provider>

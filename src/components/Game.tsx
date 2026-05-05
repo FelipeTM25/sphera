@@ -1,6 +1,5 @@
 import { useRef, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Physics } from '@react-three/cannon'
 import * as THREE from 'three'
 import { Ball } from './Ball'
 import { Track } from './Track'
@@ -11,6 +10,10 @@ import { useGame } from '../store/gameStore'
 export function Game() {
   const { gameState, currentLevel } = useGame()
   const ballPosition = useRef(new THREE.Vector3(0, 3, 2))
+
+  // Shared mesh registries — populated by Track, consumed by Ball
+  const trackMeshes = useRef<THREE.Mesh[]>([])
+  const obstacleMeshes = useRef<THREE.Mesh[]>([])
 
   return (
     <Canvas
@@ -39,28 +42,24 @@ export function Game() {
       <Starfield ballPosition={ballPosition} />
 
       <Suspense fallback={null}>
-        <Physics
-          gravity={[0, -25, 0]}
-          defaultContactMaterial={{ friction: 0.6, restitution: 0.05 }}
-          broadphase="SAP"
-          allowSleep={false}
-          stepSize={1 / 60}
-          maxSubSteps={6}
-          iterations={12}
-          tolerance={0.0001}
-        >
-          {/* Keep track mounted so physics bodies exist before ball spawns (fixes retry edge-cases) */}
-          <Track level={currentLevel} ballPosition={ballPosition} />
+        {/* Track is always mounted so meshes are registered before ball spawns */}
+        <Track
+          level={currentLevel}
+          ballPosition={ballPosition}
+          trackMeshes={trackMeshes}
+          obstacleMeshes={obstacleMeshes}
+        />
 
-          {gameState === 'playing' && (
-            <Ball
-              level={currentLevel}
-              onPositionUpdate={(pos) => {
-                ballPosition.current.copy(pos)
-              }}
-            />
-          )}
-        </Physics>
+        {gameState === 'playing' && (
+          <Ball
+            level={currentLevel}
+            onPositionUpdate={(pos) => {
+              ballPosition.current.copy(pos)
+            }}
+            trackMeshes={trackMeshes}
+            obstacleMeshes={obstacleMeshes}
+          />
+        )}
       </Suspense>
     </Canvas>
   )

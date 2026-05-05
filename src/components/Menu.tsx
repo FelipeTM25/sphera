@@ -4,15 +4,15 @@ import { LEVELS, type LevelId } from '../levels'
 
 function HomeIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M3 11.5 12 4l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.5Z" stroke="currentColor" strokeWidth="2" />
     </svg>
   )
 }
 
-function PlayIcon() {
+function PlayIcon({ size = 18 }: { size?: number }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M9 7v10l10-5-10-5Z" fill="currentColor" />
     </svg>
   )
@@ -31,12 +31,33 @@ function TrophyIcon() {
   )
 }
 
+function LockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  )
+}
+
 function StarSlots({ value }: { value: number }) {
   return (
-    <div className="level-stars neon">
+    <div className="star-slots">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className={i < value ? 'level-star filled' : 'level-star'} />
+        <div key={i} className={i < value ? 'star-slot-sq filled' : 'star-slot-sq'} />
       ))}
+    </div>
+  )
+}
+
+// Animated ball decoration for home screen
+function BallDecoration() {
+  return (
+    <div className="home-ball-wrap">
+      <div className="home-ball">
+        <div className="home-ball-inner" />
+        <div className="home-ball-glow" />
+      </div>
     </div>
   )
 }
@@ -70,60 +91,66 @@ export function Menu() {
 
   if (gameState === 'playing') return null
 
+  // ── HOME SCREEN ────────────────────────────────────────────────────────────
   if (gameState === 'home') {
     return (
       <div className="overlay">
         <div className="grid-bg" />
-        <div className="overlay-panel overlay-panel-compact">
-          <div className="game-title">SPHERA</div>
-          <div className="game-subtitle">¡Rueda y sobrevive!</div>
+        <div className="mobile-panel home-panel">
 
-          <div className="divider" />
+          {/* Hero area */}
+          <div className="home-hero">
+            <div className="home-hero-inner">
+              <div className="game-title">SPHERA</div>
+              <div className="game-subtitle">¡Rueda y sobrevive!</div>
+            </div>
+          </div>
 
-          <button className="btn-primary" onClick={openLevels}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              {PlayIcon()} <span>JUGAR</span>
-            </span>
-          </button>
+          {/* Ball decoration */}
+          <BallDecoration />
 
-          <button className="btn-primary btn-secondary" onClick={openRecords}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              {TrophyIcon()} <span>RÉCORDS</span>
-            </span>
-          </button>
+          {/* Actions */}
+          <div className="home-actions">
+            <button id="btn-play" className="btn-mobile btn-mobile-primary" onClick={openLevels}>
+              <PlayIcon size={20} />
+              <span>JUGAR</span>
+            </button>
 
-          <div className="hint">PRESIONA ESPACIO PARA CONTINUAR</div>
+            <button id="btn-records" className="btn-mobile btn-mobile-secondary" onClick={openRecords}>
+              <TrophyIcon />
+              <span>Récords</span>
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
+  // ── RECORDS ────────────────────────────────────────────────────────────────
   if (gameState === 'records') {
     return (
       <div className="overlay">
         <div className="grid-bg" />
-        <div className="overlay-panel overlay-panel-wide">
-          <div className="overlay-topbar">
+        <div className="mobile-panel">
+          <div className="panel-topbar">
             <button className="icon-btn" onClick={goHome} aria-label="Inicio">
-              {HomeIcon()}
+              <HomeIcon />
             </button>
             <div>
-              <div className="panel-h1">RÉCORDS</div>
+              <div className="panel-h1">Récords</div>
               <div className="panel-h2">Estrellas máximas por nivel</div>
             </div>
           </div>
 
           <div className="divider" />
 
-          <div className="level-list-neon">
+          <div className="level-list">
             {LEVELS.map((lvl) => (
-              <div key={lvl.id} className="level-card-neon">
-                <div className="level-left-neon">
-                  <div className="level-number-neon">{lvl.id}</div>
-                  <div>
-                    <div className="level-name-neon">{lvl.title}</div>
-                    <div className="level-diff-neon">{lvl.difficultyLabel}</div>
-                  </div>
+              <div key={lvl.id} className="level-card">
+                <div className="level-num">{lvl.id}</div>
+                <div className="level-info">
+                  <div className="level-name">{lvl.title}</div>
+                  <div className="level-diff">{lvl.difficultyLabel}</div>
                 </div>
                 <StarSlots value={bestStarsByLevel[lvl.id]} />
               </div>
@@ -134,56 +161,51 @@ export function Menu() {
     )
   }
 
+  // ── SELECT LEVEL ───────────────────────────────────────────────────────────
   if (gameState === 'levels') {
     return (
       <div className="overlay">
         <div className="grid-bg" />
-        <div className="overlay-panel overlay-panel-wide">
-          <div className="overlay-topbar">
+        <div className="mobile-panel">
+          <div className="panel-topbar">
             <button className="icon-btn" onClick={goHome} aria-label="Inicio">
-              {HomeIcon()}
+              <HomeIcon />
             </button>
             <div>
-              <div className="panel-h1">SELECCIONA NIVEL</div>
+              <div className="panel-h1">Selecciona Nivel</div>
               <div className="panel-h2">Elige tu desafío</div>
             </div>
           </div>
 
           <div className="divider" />
 
-          <div className="level-list-neon">
+          <div className="level-list">
             {LEVELS.map((lvl) => {
               const locked = lvl.id > unlockedMaxLevelId
               const selected = lvl.id === currentLevelId
 
-              const onPick = () => {
-                if (locked) return
-                selectLevel(lvl.id as LevelId)
-                startRun()
-              }
-
               return (
                 <button
                   key={lvl.id}
-                  className={
-                    locked
-                      ? 'level-card-neon level-btn-neon locked'
-                      : selected
-                        ? 'level-card-neon level-btn-neon selected'
-                        : 'level-card-neon level-btn-neon'
-                  }
-                  onClick={onPick}
+                  id={`level-btn-${lvl.id}`}
+                  className={`level-card level-btn${selected ? ' selected' : ''}${locked ? ' locked' : ''}`}
+                  onClick={() => {
+                    if (locked) return
+                    selectLevel(lvl.id as LevelId)
+                    startRun()
+                  }}
+                  disabled={locked}
                 >
-                  <div className="level-left-neon">
-                    <div className="level-number-neon">{lvl.id}</div>
-                    <div>
-                      <div className="level-name-neon">{lvl.title}</div>
-                      <div className="level-diff-neon">{lvl.difficultyLabel}</div>
-                    </div>
+                  <div className="level-num">{lvl.id}</div>
+                  <div className="level-info">
+                    <div className="level-name">{lvl.title}</div>
+                    <div className="level-diff">{lvl.difficultyLabel}</div>
                   </div>
-                  <div className="level-right-neon">
-                    <span className="level-play-neon">{PlayIcon()}</span>
+                  <div className="level-right">
                     <StarSlots value={bestStarsByLevel[lvl.id]} />
+                    <div className="level-play-btn">
+                      {locked ? <LockIcon /> : <PlayIcon />}
+                    </div>
                   </div>
                 </button>
               )
@@ -194,6 +216,7 @@ export function Menu() {
     )
   }
 
+  // ── LEVEL COMPLETE ─────────────────────────────────────────────────────────
   if (gameState === 'levelComplete') {
     const stars = runCollectedStars.filter(Boolean).length
     const nextId = (currentLevelId + 1) as LevelId
@@ -202,18 +225,20 @@ export function Menu() {
     return (
       <div className="overlay">
         <div className="grid-bg" />
-        <div className="overlay-panel overlay-panel-compact">
-          <div className="panel-h1">NIVEL COMPLETADO</div>
-          <div className="panel-h2">Estrellas obtenidas</div>
+        <div className="mobile-panel mobile-panel-compact">
+          <div className="panel-badge panel-badge-success">✓ COMPLETADO</div>
+          <div className="panel-h1" style={{ textAlign: 'center' }}>Nivel Completado</div>
+          <div className="panel-h2" style={{ textAlign: 'center' }}>Estrellas obtenidas</div>
+
           <div className="divider" />
           <StarSlots value={stars} />
-
           <div className="divider" />
 
-          <div className="overlay-actions">
+          <div className="action-stack">
             {hasNext && (
               <button
-                className="btn-primary"
+                id="btn-next-level"
+                className="btn-mobile btn-mobile-primary"
                 onClick={() => {
                   selectLevel(nextId)
                   startRun()
@@ -222,38 +247,39 @@ export function Menu() {
                 SIGUIENTE NIVEL
               </button>
             )}
-            <button className="btn-primary btn-secondary" onClick={openLevels}>SELECCIONAR NIVEL</button>
-            <button className="btn-primary btn-secondary" onClick={goHome}>MENÚ PRINCIPAL</button>
+            <button className="btn-mobile btn-mobile-secondary" onClick={openLevels}>
+              SELECCIONAR NIVEL
+            </button>
+            <button className="btn-mobile btn-mobile-ghost" onClick={goHome}>
+              MENÚ PRINCIPAL
+            </button>
           </div>
-
-          <div className="hint">PRESIONA ESPACIO PARA CONTINUAR</div>
         </div>
       </div>
     )
   }
 
-  // gameState === 'gameOver'
+  // ── GAME OVER ──────────────────────────────────────────────────────────────
   return (
     <div className="overlay">
       <div className="grid-bg" />
-      <div className="overlay-panel overlay-panel-compact">
-        <div className="game-over-title">GAME OVER</div>
-        <div className="panel-h2">Intenta de nuevo</div>
+      <div className="mobile-panel mobile-panel-compact">
+        <div className="panel-badge panel-badge-danger">✕ GAME OVER</div>
+        <div className="game-over-title">¡FUERA!</div>
+        <div className="panel-h2" style={{ textAlign: 'center' }}>Inténtalo de nuevo</div>
 
         <div className="divider" />
         <StarSlots value={runCollectedStars.filter(Boolean).length} />
         <div className="divider" />
 
-        <div className="overlay-actions row">
-          <button className="btn-primary" onClick={retryLevel}>
+        <div className="action-stack">
+          <button id="btn-retry" className="btn-mobile btn-mobile-primary" onClick={retryLevel}>
             JUGAR DE NUEVO
           </button>
-          <button className="btn-primary btn-secondary" onClick={goHome}>
+          <button className="btn-mobile btn-mobile-secondary" onClick={goHome}>
             MENÚ PRINCIPAL
           </button>
         </div>
-
-        <div className="hint">PRESIONA ESPACIO PARA REINTENTAR</div>
       </div>
     </div>
   )
