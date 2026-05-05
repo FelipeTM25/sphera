@@ -155,7 +155,6 @@ body {
   color: rgba(255,255,255,0.25);
 }
 
-/* ─── Overlay ────────────────────────────────────────────────────────────────── */
 .overlay {
   position: fixed;
   inset: 0;
@@ -164,7 +163,7 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 20;
-  background: radial-gradient(ellipse at center, rgba(0,10,40,0.75) 0%, rgba(5,5,16,0.94) 100%);
+  background: radial-gradient(ellipse at center, rgba(0,10,40,1) 0%, rgba(5,5,16,1) 100%);
   padding: 16px;
 }
 
@@ -176,6 +175,7 @@ body {
     linear-gradient(90deg, rgba(0,245,255,0.05) 1px, transparent 1px);
   background-size: 56px 56px;
   opacity: 0.4;
+  -webkit-mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.0) 65%);
   mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.0) 65%);
   pointer-events: none;
 }
@@ -347,8 +347,13 @@ body {
 /* ─── Panel top bar ──────────────────────────────────────────────────────────── */
 .panel-topbar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 14px;
+}
+
+.panel-topbar .icon-btn {
+  margin-bottom: 4px;
 }
 
 .icon-btn {
@@ -369,6 +374,19 @@ body {
 .icon-btn:hover {
   background: rgba(255,255,255,0.1);
   border-color: rgba(255,255,255,0.35);
+}
+
+.icon-circle-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
 }
 
 .panel-h1 {
@@ -475,10 +493,15 @@ body {
   margin-top: 2px;
 }
 
+.level-stars-bottom {
+  margin-top: 8px;
+}
+
 .level-right {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -498,6 +521,18 @@ body {
 .star-slots {
   display: flex;
   gap: 5px;
+}
+
+.star-slots-large {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.star-slots-large .star-slot-sq {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
 }
 
 .star-slot-sq {
@@ -554,9 +589,9 @@ body {
 
 /* ─── Game title ─────────────────────────────────────────────────────────────── */
 .game-title {
-  font-size: 60px;
+  font-size: 48px;
   font-weight: 900;
-  letter-spacing: 10px;
+  letter-spacing: 8px;
   background: linear-gradient(135deg, var(--neon-cyan) 0%, #fff 50%, var(--neon-green) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -596,6 +631,74 @@ body {
   92% { transform: translate(2px, -1px); }
   94% { transform: translate(-1px, 0); }
   96% { transform: translate(1px, 1px); }
+}
+
+/* ─── Stats Grid (Game Over & Level Complete) ────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+  margin: 16px 0;
+}
+
+.stats-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.stat-box-large {
+  grid-column: 1 / -1;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-box-large .label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.stat-box-large .value {
+  font-family: 'Orbitron', monospace;
+  font-size: 32px;
+  font-weight: 900;
+  color: #111;
+}
+
+.stat-box {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-box .label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.stat-box .value {
+  font-family: 'Orbitron', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
 }
 
 /* ─── Touch controls overlay ─────────────────────────────────────────────────── */
@@ -687,7 +790,7 @@ body {
     --panel-padding: 36px 36px;
   }
   .game-title {
-    font-size: 72px;
-    letter-spacing: 14px;
+    font-size: 56px;
+    letter-spacing: 8px;
   }
 }

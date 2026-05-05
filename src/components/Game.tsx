@@ -32,8 +32,7 @@ export function Game() {
         intensity={1.4}
         color="#ffffff"
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize={[1024, 1024]}
       />
       <pointLight position={[0, 8, 0]} intensity={1.0} color="#00f5ff" distance={40} />
       <pointLight position={[-5, 3, -20]} intensity={0.5} color="#ff00ff" distance={30} />

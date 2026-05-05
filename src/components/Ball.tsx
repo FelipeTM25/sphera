@@ -1,6 +1,6 @@
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect } from 'react'
 import * as THREE from 'three'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import { useGame } from '../store/gameStore'
 import { useInput } from '../hooks/useInput'
 import type { LevelDef } from '../levels'
@@ -32,7 +32,6 @@ const _outPos = new THREE.Vector3()
 export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: BallProps) {
   const { gameState, endGame, updateSpeed } = useGame()
   const input = useInput()
-  const { scene } = useThree()
 
   // ── State refs (avoid re-renders) ──────────────────────────────────────────
   const posRef = useRef(new THREE.Vector3(level.start.x, level.start.y, level.start.z))
@@ -61,7 +60,6 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
   const obsBoxMin = useRef(new THREE.Vector3())
   const obsBoxMax = useRef(new THREE.Vector3())
   const obsWorldPos = useRef(new THREE.Vector3())
-  const obsWorldSize = useRef(new THREE.Vector3())
   const obsBox = useRef(new THREE.Box3())
   const jumpCooldown = useRef(0)
 

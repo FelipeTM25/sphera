@@ -40,6 +40,26 @@ function LockIcon() {
   )
 }
 
+function RefreshIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M21 3v5h-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M3 21v-5h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M21 8A9 9 0 0 0 3.6 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M3 16a9 9 0 0 0 17.4-1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+function RibbonIcon() {
+  return (
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="8" r="5" stroke="currentColor" strokeWidth="2" />
+      <path d="M9 12.5L7 22l5-3 5 3-2-9.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
 function StarSlots({ value }: { value: number }) {
   return (
     <div className="star-slots">
@@ -200,9 +220,11 @@ export function Menu() {
                   <div className="level-info">
                     <div className="level-name">{lvl.title}</div>
                     <div className="level-diff">{lvl.difficultyLabel}</div>
+                    <div className="level-stars-bottom">
+                      <StarSlots value={bestStarsByLevel[lvl.id]} />
+                    </div>
                   </div>
                   <div className="level-right">
-                    <StarSlots value={bestStarsByLevel[lvl.id]} />
                     <div className="level-play-btn">
                       {locked ? <LockIcon /> : <PlayIcon />}
                     </div>
@@ -226,13 +248,36 @@ export function Menu() {
       <div className="overlay">
         <div className="grid-bg" />
         <div className="mobile-panel mobile-panel-compact">
-          <div className="panel-badge panel-badge-success">✓ COMPLETADO</div>
-          <div className="panel-h1" style={{ textAlign: 'center' }}>Nivel Completado</div>
-          <div className="panel-h2" style={{ textAlign: 'center' }}>Estrellas obtenidas</div>
+          <div className="icon-circle-large">
+            <RibbonIcon />
+          </div>
+          <div className="panel-h1" style={{ textAlign: 'center' }}>¡NIVEL COMPLETADO!</div>
+          <div className="panel-h2" style={{ textAlign: 'center' }}>Nivel {currentLevelId} superado</div>
 
-          <div className="divider" />
-          <StarSlots value={stars} />
-          <div className="divider" />
+          <div className="star-slots-large">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className={i < stars ? 'star-slot-sq filled' : 'star-slot-sq'} />
+            ))}
+          </div>
+
+          <div className="stats-grid stats-grid-3">
+            <div className="stat-box-large">
+              <div className="label">PUNTUACIÓN</div>
+              <div className="value">2840</div>
+            </div>
+            <div className="stat-box">
+              <div className="label">Distancia</div>
+              <div className="value">450m</div>
+            </div>
+            <div className="stat-box">
+              <div className="label">Tiempo</div>
+              <div className="value">2:15</div>
+            </div>
+            <div className="stat-box">
+              <div className="label">Bonus</div>
+              <div className="value">+500</div>
+            </div>
+          </div>
 
           <div className="action-stack">
             {hasNext && (
@@ -244,14 +289,13 @@ export function Menu() {
                   startRun()
                 }}
               >
-                SIGUIENTE NIVEL
+                <PlayIcon size={20} />
+                <span>SIGUIENTE NIVEL</span>
               </button>
             )}
             <button className="btn-mobile btn-mobile-secondary" onClick={openLevels}>
-              SELECCIONAR NIVEL
-            </button>
-            <button className="btn-mobile btn-mobile-ghost" onClick={goHome}>
-              MENÚ PRINCIPAL
+              <HomeIcon />
+              <span>Seleccionar Nivel</span>
             </button>
           </div>
         </div>
@@ -264,20 +308,38 @@ export function Menu() {
     <div className="overlay">
       <div className="grid-bg" />
       <div className="mobile-panel mobile-panel-compact">
-        <div className="panel-badge panel-badge-danger">✕ GAME OVER</div>
-        <div className="game-over-title">¡FUERA!</div>
-        <div className="panel-h2" style={{ textAlign: 'center' }}>Inténtalo de nuevo</div>
+        <div className="game-over-title" style={{ marginTop: '0', fontSize: '36px' }}>GAME OVER</div>
+        <div className="panel-h2" style={{ textAlign: 'center' }}>Nivel {currentLevelId}</div>
 
-        <div className="divider" />
-        <StarSlots value={runCollectedStars.filter(Boolean).length} />
-        <div className="divider" />
+        <div className="star-slots-large" style={{ margin: '8px 0' }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={i < runCollectedStars.filter(Boolean).length ? 'star-slot-sq filled' : 'star-slot-sq'} />
+          ))}
+        </div>
+
+        <div className="stats-grid">
+          <div className="stat-box-large">
+            <div className="label">PUNTUACIÓN FINAL</div>
+            <div className="value">1250</div>
+          </div>
+          <div className="stat-box">
+            <div className="label">Distancia</div>
+            <div className="value">127m</div>
+          </div>
+          <div className="stat-box">
+            <div className="label">Tiempo</div>
+            <div className="value">0:45</div>
+          </div>
+        </div>
 
         <div className="action-stack">
           <button id="btn-retry" className="btn-mobile btn-mobile-primary" onClick={retryLevel}>
-            JUGAR DE NUEVO
+            <RefreshIcon />
+            <span>REINTENTAR</span>
           </button>
-          <button className="btn-mobile btn-mobile-secondary" onClick={goHome}>
-            MENÚ PRINCIPAL
+          <button className="btn-mobile btn-mobile-secondary" onClick={openLevels}>
+            <HomeIcon />
+            <span>Seleccionar Nivel</span>
           </button>
         </div>
       </div>
