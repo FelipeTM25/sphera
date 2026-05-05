@@ -9,7 +9,7 @@ import { Starfield } from './Starfield'
 import { useGame } from '../store/gameStore'
 
 export function Game() {
-  const { gameState } = useGame()
+  const { gameState, currentLevel } = useGame()
   const ballPosition = useRef(new THREE.Vector3(0, 3, 2))
 
   return (
@@ -17,6 +17,7 @@ export function Game() {
       shadows
       camera={{ fov: 72, near: 0.1, far: 600, position: [0, 8, 14] }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
+      dpr={[1, 1.5]}
       style={{ background: '#050510' }}
     >
       <color attach="background" args={['#050510']} />
@@ -42,12 +43,22 @@ export function Game() {
           gravity={[0, -25, 0]}
           defaultContactMaterial={{ friction: 0.6, restitution: 0.05 }}
           broadphase="SAP"
+          allowSleep={false}
+          stepSize={1 / 60}
+          maxSubSteps={6}
+          iterations={12}
+          tolerance={0.0001}
         >
-          {/* Track is always mounted so physics bodies exist before ball spawns */}
-          <Track ballPosition={ballPosition} />
+          {/* Keep track mounted so physics bodies exist before ball spawns (fixes retry edge-cases) */}
+          <Track level={currentLevel} ballPosition={ballPosition} />
 
           {gameState === 'playing' && (
-            <Ball onPositionUpdate={(pos) => { ballPosition.current.copy(pos) }} />
+            <Ball
+              level={currentLevel}
+              onPositionUpdate={(pos) => {
+                ballPosition.current.copy(pos)
+              }}
+            />
           )}
         </Physics>
       </Suspense>

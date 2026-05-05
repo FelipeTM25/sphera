@@ -1,101 +1,167 @@
-import { useState, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { TrackSegment, type SegmentDef } from './TrackSegment'
 import { Obstacle } from './Obstacle'
 import { useGame } from '../store/gameStore'
-
-const SEG_LENGTH = 14
-const SEG_WIDTH = 9
-const SEG_DEPTH = 1.0
-const POOL = 24
-
-interface ObsDef {
-  id: string
-  position: [number, number, number]
-  size: [number, number, number]
-  type: 'wall' | 'pillar' | 'gate'
-}
-
-function rand(min: number, max: number) {
-  return Math.random() * (max - min) + min
-}
-
-function buildSegments(startZ: number, count: number, colorOff: number): SegmentDef[] {
-  const out: SegmentDef[] = []
-  let y = 0
-  for (let i = 0; i < count; i++) {
-    const z = startZ - i * SEG_LENGTH
-    const ramp = i > 2 && Math.random() < 0.22
-    const angle = ramp ? (Math.random() < 0.5 ? -0.15 : 0.15) : 0
-    if (ramp) y += angle * SEG_LENGTH * 0.5
-    out.push({
-      id: `${z.toFixed(1)}`,
-      position: [0, y - SEG_DEPTH / 2, z],
-      size: [SEG_WIDTH, SEG_DEPTH, SEG_LENGTH],
-      rotation: [angle, 0, 0],
-      colorIndex: (i + colorOff) % 4,
-    })
-  }
-  return out
-}
-
-function buildObstacles(segs: SegmentDef[], startIdx: number): ObsDef[] {
-  const out: ObsDef[] = []
-  segs.forEach((seg, i) => {
-    if (i < 3 || Math.random() > 0.3) return
-    const types: ObsDef['type'][] = ['wall', 'pillar', 'gate']
-    const type = types[Math.floor(Math.random() * 3)]
-    const h = type === 'pillar' ? 2.0 : 1.1
-    const w = type === 'wall' ? SEG_WIDTH * 0.55 : 1.1
-    const xPos = rand(-2.5, 2.5)
-    out.push({
-      id: `obs-${startIdx + i}`,
-      position: [xPos, seg.position[1] + h / 2 + SEG_DEPTH / 2 + 0.05, seg.position[2]],
-      size: [w, h, 0.7],
-      type,
-    })
-  })
-  return out
-}
+import type { LevelDef, ObstacleDef } from '../levels'
 
 interface TrackProps {
+  level: LevelDef
   ballPosition: React.MutableRefObject<THREE.Vector3>
 }
 
-// Generate initial segments immediately so physics bodies exist before ball spawns
-const INITIAL_SEGS = buildSegments(0, POOL, 0)
-const INITIAL_OBS = buildObstacles(INITIAL_SEGS, 0)
+function obstacleSizeFor(level: LevelDef, def: ObstacleDef): [number, number, number] {
+  if (def.size) return [def.size.w, def.size.h, def.size.d]
+  if (def.type === 'pillar') return [1.1, 2.0, 1.1]
+  if (def.type === 'gate') return [1.2, 1.1, 0.7]
+  // wall
+  return [level.trackWidth * 0.55, 1.1, 0.7]
+}
 
-export function Track({ ballPosition }: TrackProps) {
-  const { gameState } = useGame()
-  const [segments, setSegments] = useState<SegmentDef[]>(INITIAL_SEGS)
-  const [obstacles, setObstacles] = useState<ObsDef[]>(INITIAL_OBS)
-  const lastZRef = useRef(6 - POOL * SEG_LENGTH)
-  const colorOffRef = useRef(0)
-  const obsIdxRef = useRef(POOL)
+function buildLevelLayout(level: LevelDef) {
+  const L = level.segmentLength
+  const W = level.trackWidth
+  const D = level.segmentDepth
+
+  const segments: SegmentDef[] = []
+  const solidByTimelineIndex = new Map<number, SegmentDef>()
+
+  let surfaceStartY = 0
+  let timelineIndex = 0
+  let colorIdx = 0
+
+  for (const piece of level.pieces) {
+    if (piece.kind === 'gap') {
+      timelineIndex += piece.segments
+      continue
+    }
+
+    for (let i = 0; i < piece.segments; i++) {
+      const angle = piece.angle
+      const dz = L * Math.sin(angle)
+      const surfaceCenterY = surfaceStartY + dz * 0.5
+      const centerY = surfaceCenterY - D / 2
+      const centerZ = 0 - timelineIndex * L
+
+      const seg: SegmentDef = {
+        id: `seg-${level.id}-${timelineIndex}`,
+        position: [0, centerY, centerZ],
+        size: [W, D, L],
+        rotation: [angle, 0, 0],
+        colorIndex: colorIdx++,
+      }
+      segments.push(seg)
+      solidByTimelineIndex.set(timelineIndex, seg)
+
+      surfaceStartY += dz
+      timelineIndex += 1
+    }
+  }
+
+  const lastSeg = segments[segments.length - 1]
+  const finishZ = lastSeg ? lastSeg.position[2] - level.segmentLength * 0.6 : -100
+
+  const obstacles = level.obstacles
+    .map((def) => {
+      const seg = solidByTimelineIndex.get(def.segmentIndex)
+      if (!seg) return null
+      const size = obstacleSizeFor(level, def)
+      const y = seg.position[1] + level.segmentDepth / 2 + size[1] / 2 + 0.05
+      return {
+        id: def.id,
+        type: def.type,
+        position: [def.x, y, seg.position[2]] as [number, number, number],
+        size,
+      }
+    })
+    .filter(Boolean) as Array<{ id: string; type: ObstacleDef['type']; position: [number, number, number]; size: [number, number, number] }>
+
+  const stars = level.stars
+    .map((def, idx) => {
+      const seg = solidByTimelineIndex.get(def.segmentIndex)
+      if (!seg) return null
+      const y = seg.position[1] + level.segmentDepth / 2 + def.yOffset
+      return {
+        id: def.id,
+        index: idx,
+        position: new THREE.Vector3(def.x, y, seg.position[2]),
+      }
+    })
+    .filter(Boolean) as Array<{ id: string; index: number; position: THREE.Vector3 }>
+
+  const finishY = lastSeg ? lastSeg.position[1] + level.segmentDepth / 2 + 1.2 : 1.2
+
+  return { segments, obstacles, stars, finishZ, finishY }
+}
+
+export function Track({ level, ballPosition }: TrackProps) {
+  const { gameState, runCollectedStars, collectStar, completeLevel } = useGame()
+  const { segments, obstacles, stars, finishZ, finishY } = useMemo(() => buildLevelLayout(level), [level])
+  const didCompleteRef = useRef(false)
+
+  useEffect(() => {
+    didCompleteRef.current = false
+  }, [gameState, level.id])
 
   useFrame(() => {
     if (gameState !== 'playing') return
-    const bz = ballPosition.current.z
-    // Spawn new batch when ball is within 120 units of track end
-    if (bz < lastZRef.current + 120) {
-      colorOffRef.current = (colorOffRef.current + 1) % 4
-      const newSegs = buildSegments(lastZRef.current, POOL, colorOffRef.current)
-      const newObs = buildObstacles(newSegs, obsIdxRef.current)
-      obsIdxRef.current += POOL
-      lastZRef.current -= POOL * SEG_LENGTH
-      setSegments(prev => [...prev.filter(s => s.position[2] > bz - 50), ...newSegs])
-      setObstacles(prev => [...prev.filter(o => o.position[2] > bz - 50), ...newObs])
+    const ball = ballPosition.current
+
+    // Collect stars
+    for (const star of stars) {
+      if (runCollectedStars[star.index]) continue
+      if (ball.distanceToSquared(star.position) < 1.25 * 1.25) {
+        collectStar(star.index)
+      }
+    }
+
+    // Finish line
+    if (!didCompleteRef.current && ball.z < finishZ) {
+      didCompleteRef.current = true
+      completeLevel()
     }
   })
 
   return (
     <group>
-      {segments.map(seg => <TrackSegment key={seg.id} seg={seg} />)}
-      {gameState === 'playing' && obstacles.map(obs => (
+      {segments.map((seg) => (
+        <TrackSegment key={seg.id} seg={seg} />
+      ))}
+
+      {(gameState === 'playing' || gameState === 'levelComplete') && obstacles.map((obs) => (
         <Obstacle key={obs.id} position={obs.position} size={obs.size} type={obs.type} />
       ))}
+
+      {/* Stars (visual only; collection is distance-based) */}
+      {(gameState === 'playing' || gameState === 'levelComplete') && stars.map((s) => (
+        runCollectedStars[s.index]
+          ? null
+          : (
+            <group key={s.id} position={[s.position.x, s.position.y, s.position.z]}>
+              <mesh>
+                <icosahedronGeometry args={[0.35, 0]} />
+                <meshStandardMaterial color="#ffe680" emissive="#ffcc33" emissiveIntensity={1.2} metalness={0.2} roughness={0.3} />
+              </mesh>
+              <mesh scale={1.8}>
+                <icosahedronGeometry args={[0.35, 0]} />
+                <meshBasicMaterial color="#ffe680" transparent opacity={0.08} side={THREE.BackSide} />
+              </mesh>
+            </group>
+          )
+      ))}
+
+      {/* Finish gate (visual) */}
+      <group position={[0, finishY, finishZ]}>
+        <mesh>
+          <boxGeometry args={[level.trackWidth * 0.85, 2.2, 0.35]} />
+          <meshStandardMaterial color="#d9f3ff" emissive="#00f5ff" emissiveIntensity={0.35} metalness={0.6} roughness={0.25} />
+        </mesh>
+        <mesh scale={[1.08, 1.15, 1.2]}>
+          <boxGeometry args={[level.trackWidth * 0.85, 2.2, 0.35]} />
+          <meshBasicMaterial color="#00f5ff" transparent opacity={0.06} side={THREE.BackSide} />
+        </mesh>
+      </group>
     </group>
   )
 }

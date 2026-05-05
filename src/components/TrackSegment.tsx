@@ -1,5 +1,4 @@
 import { useBox } from '@react-three/cannon'
-import * as THREE from 'three'
 
 export interface SegmentDef {
   id: string
@@ -26,7 +25,6 @@ export function TrackSegment({ seg }: { seg: SegmentDef }) {
 
   const color = TRACK_COLORS[seg.colorIndex % 4]
   const [w, h, d] = seg.size
-  const [px, py, pz] = seg.position
 
   return (
     <group position={seg.position} rotation={seg.rotation}>
