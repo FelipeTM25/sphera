@@ -162,6 +162,30 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     }
   }, [gameState, level])
 
+  // ── Jump input: Direct event listener for zero-delay discrete presses ──
+  useEffect(() => {
+    const onJumpDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        jumpBufferRef.current = JUMP_BUFFER_TIME
+      }
+    }
+    const onTouchJump = (e: TouchEvent) => {
+      // Top 45% of screen = jump zone
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].clientY < window.innerHeight * 0.45) {
+          jumpBufferRef.current = JUMP_BUFFER_TIME
+          break
+        }
+      }
+    }
+    window.addEventListener('keydown', onJumpDown)
+    window.addEventListener('touchstart', onTouchJump, { passive: true })
+    return () => {
+      window.removeEventListener('keydown', onJumpDown)
+      window.removeEventListener('touchstart', onTouchJump)
+    }
+  }, [])
+
   // ── Obstacle detection helpers ─────────────────────────────────────────────
   const obsBoxMin = useRef(new THREE.Vector3())
   const obsBoxMax = useRef(new THREE.Vector3())
@@ -182,14 +206,9 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
 
     const wasOnGround = onGroundRef.current
 
-    // Jump input: edge-triggered + buffer (works for both keyboard and touch)
-    const jumpHeld = input.current.has('Space')
-    const jumpPressed = jumpHeld && !wasJumpHeldRef.current
-    wasJumpHeldRef.current = jumpHeld
-    if (jumpPressed) {
-      jumpBufferRef.current = JUMP_BUFFER_TIME
-    } else if (jumpBufferRef.current > 0) {
-      jumpBufferRef.current = Math.max(0, jumpBufferRef.current - dt)
+    // Decay the jump buffer over time
+    if (jumpBufferRef.current > 0) {
+      jumpBufferRef.current -= dt
     }
 
     // 1. Accelerate forward speed progressively
@@ -418,7 +437,8 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
 
     if (!grounded) {
       // Leaving the ground: preserve upward slope momentum to make ramp launches feel natural.
-      if (wasOnGround && !jumpPressed) {
+      // Skip if a jump was just buffered (jump velocity will take precedence).
+      if (wasOnGround && jumpBufferRef.current <= 0) {
         const launchVy = Math.max(0, lastGroundVyRef.current)
         if (launchVy > vel.y) vel.y = launchVy
       }
@@ -429,6 +449,7 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     const canJump = grounded || coyoteTimerRef.current > 0
     if (jumpBufferRef.current > 0 && canJump) {
       vel.y = JUMP_VELOCITY
+      pos.y += vel.y * dt // instantly apply jump velocity to remove visual delay
       grounded = false
       coyoteTimerRef.current = 0
       jumpBufferRef.current = 0

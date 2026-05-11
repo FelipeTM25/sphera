@@ -4,6 +4,9 @@ import { useEffect, useRef } from 'react'
  * Unified input: keyboard + touch.
  * Returns a ref to a Set of active "action codes" (same as KeyboardEvent.code)
  * so Ball.tsx can stay keyboard-code-based while touch works too.
+ *
+ * Jump fix: touch 'Space' adds key to the Set, and the game loop natively 
+ * handles edge triggers via wasJumpHeldRef.
  */
 export function useInput() {
   const keys = useRef<Set<string>>(new Set())
@@ -22,9 +25,9 @@ export function useInput() {
     window.addEventListener('keyup', onKeyUp)
 
     // ── Touch ─────────────────────────────────────────────────────────────────
-    // Split screen: top 55% = Space (Jump), bottom left = ArrowLeft, bottom right = ArrowRight
+    // Layout: top 40% of screen = jump (Space pulse), bottom-left = ArrowLeft, bottom-right = ArrowRight
     const getDirection = (touch: Touch): string => {
-      if (touch.clientY < window.innerHeight * 0.55) return 'Space'
+      if (touch.clientY < window.innerHeight * 0.45) return 'Space'
       return touch.clientX < window.innerWidth / 2 ? 'ArrowLeft' : 'ArrowRight'
     }
 
