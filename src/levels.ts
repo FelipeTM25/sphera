@@ -163,7 +163,7 @@ export const LEVELS: LevelDef[] = [
       { kind: 'gap', segments: 1 },
       { kind: 'solid', segments: 4, angle: -0.08 },
       // Special cylinder tunnel (360° dodge section)
-      { kind: 'cylinder', segments: 10, radius: 4.8 },
+      { kind: 'cylinder', segments: 10, radius: 6.4 },
       // Exit + finish stretch
       { kind: 'solid', segments: 8, angle: 0 },
     ],
@@ -223,7 +223,7 @@ export const LEVELS: LevelDef[] = [
       { kind: 'gap',   segments: 1 },
       { kind: 'solid', segments: 3, angle: 0.18 },
       // Cylinder 1 (spiky + 360° dodge)
-      { kind: 'cylinder', segments: 12, radius: 4.6 },
+      { kind: 'cylinder', segments: 12, radius: 6.0 },
       { kind: 'solid', segments: 5, angle: -0.12, widthMultiplier: 0.78 },
       { kind: 'gap',   segments: 1 },
       { kind: 'solid', segments: 6, angle: 0.10 },
@@ -233,7 +233,7 @@ export const LEVELS: LevelDef[] = [
       { kind: 'gap',   segments: 1 },
       { kind: 'solid', segments: 5, angle: -0.14 },
       // Cylinder 2 (harder)
-      { kind: 'cylinder', segments: 14, radius: 4.4 },
+      { kind: 'cylinder', segments: 14, radius: 5.8 },
       // Final stretch
       { kind: 'solid', segments: 10, angle: 0.00 },
     ],

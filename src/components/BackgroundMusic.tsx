@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
+import { useGame } from '../store/gameStore'
 
 // Small procedural "arcade/chiptune" loop using WebAudio.
-// Starts on the first user gesture to satisfy browser autoplay policies.
+// The AudioContext is created on the first user gesture (autoplay-safe).
+// The sequencer only runs while gameState === 'playing'. On 'gameOver' the
+// music halts and a short descending "death" sting is played.
 
 type AudioCtx = AudioContext
 
@@ -87,78 +90,185 @@ function scheduleKick(opts: { ctx: AudioCtx; out: AudioNode; time: number; gain:
   osc.stop(time + 0.22)
 }
 
+// Descending "you died" sting: 3 detuned saw blips falling in pitch + a thud.
+function playDeathSound(ctx: AudioCtx, out: AudioNode) {
+  const now = ctx.currentTime + 0.01
+
+  // Falling tones
+  const notes: Array<[number, number]> = [
+    [now + 0.00, 660],
+    [now + 0.14, 440],
+    [now + 0.30, 280],
+  ]
+  for (const [time, freq] of notes) {
+    scheduleTone({
+      ctx, out, time, freq,
+      duration: 0.18, type: 'sawtooth',
+      gain: 0.22, attack: 0.004, release: 0.12,
+      detuneCents: -8, filterHz: 1800,
+    })
+    scheduleTone({
+      ctx, out, time, freq: freq * 0.5,
+      duration: 0.22, type: 'square',
+      gain: 0.10, attack: 0.004, release: 0.14,
+      filterHz: 900,
+    })
+  }
+
+  // Thud at the end
+  const thudTime = now + 0.50
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  const amp = ctx.createGain()
+  amp.gain.setValueAtTime(0.0001, thudTime)
+  amp.gain.exponentialRampToValueAtTime(0.35, thudTime + 0.01)
+  amp.gain.exponentialRampToValueAtTime(0.0001, thudTime + 0.55)
+  osc.frequency.setValueAtTime(120, thudTime)
+  osc.frequency.exponentialRampToValueAtTime(28, thudTime + 0.45)
+  osc.connect(amp)
+  amp.connect(out)
+  osc.start(thudTime)
+  osc.stop(thudTime + 0.6)
+}
+
 export function BackgroundMusic() {
+  const { gameState } = useGame()
+
   const ctxRef = useRef<AudioCtx | null>(null)
   const masterRef = useRef<GainNode | null>(null)
+  const musicGainRef = useRef<GainNode | null>(null)
   const intervalRef = useRef<number | null>(null)
 
-  const startedRef = useRef(false)
+  const initializedRef = useRef(false)
   const nextNoteTimeRef = useRef(0)
   const stepRef = useRef(0)
 
+  const prevStateRef = useRef(gameState)
+
+  // ── Init audio graph on first user gesture (autoplay-safe). ─────────────────
   useEffect(() => {
+    const initAudio = () => {
+      if (initializedRef.current) return
+      const AudioContextCtor = window.AudioContext
+      if (!AudioContextCtor) return
+      const ctx = new AudioContextCtor({ latencyHint: 'interactive' })
+      ctxRef.current = ctx
+
+      const master = ctx.createGain()
+      master.gain.setValueAtTime(0.22, ctx.currentTime)
+      master.connect(ctx.destination)
+      masterRef.current = master
+
+      // Separate gain for the music so we can fade it independently of SFX.
+      const musicGain = ctx.createGain()
+      musicGain.gain.setValueAtTime(0.85, ctx.currentTime)
+      musicGain.connect(master)
+      musicGainRef.current = musicGain
+
+      initializedRef.current = true
+    }
+
+    const onFirstGesture = () => initAudio()
+
+    window.addEventListener('pointerdown', onFirstGesture, { once: true })
+    window.addEventListener('keydown', onFirstGesture, { once: true })
+    window.addEventListener('touchstart', onFirstGesture, { once: true, passive: true } as AddEventListenerOptions)
+
+    return () => {
+      window.removeEventListener('pointerdown', onFirstGesture)
+      window.removeEventListener('keydown', onFirstGesture)
+      window.removeEventListener('touchstart', onFirstGesture)
+
+      if (intervalRef.current != null) {
+        window.clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      musicGainRef.current?.disconnect()
+      musicGainRef.current = null
+      masterRef.current?.disconnect()
+      masterRef.current = null
+
+      const ctx = ctxRef.current
+      ctxRef.current = null
+      initializedRef.current = false
+      if (ctx) {
+        try { void ctx.close() } catch { /* ignore */ }
+      }
+    }
+  }, [])
+
+  // ── React to gameState: start / stop sequencer + death sound. ───────────────
+  useEffect(() => {
+    const prev = prevStateRef.current
+    prevStateRef.current = gameState
+
     const TEMPO = 132
     const secondsPerBeat = 60 / TEMPO
-
-    // 16-step sequencer: each step = 1/4 beat (i.e., 4 steps per beat)
     const stepDur = secondsPerBeat / 4
     const scheduleAhead = 0.12
     const lookaheadMs = 25
 
-    // Patterns (16 steps = 1 bar). Loop is 2 bars (32 steps).
     const leadPattern: Array<number | null> = [
-      // Bar 1
       76, null, 79, null, 83, null, 79, null,
       76, null, 79, null, 84, null, 79, null,
-      // Bar 2
       74, null, 78, null, 81, null, 78, null,
       74, null, 78, null, 83, null, 78, null,
     ]
 
     const bassPattern: Array<number | null> = [
-      // Bar 1
       40, null, null, null, 40, null, 43, null,
       40, null, null, null, 38, null, 36, null,
-      // Bar 2
       38, null, null, null, 38, null, 41, null,
       38, null, null, null, 36, null, 35, null,
     ]
 
     const kickSteps = new Set([0, 8, 16, 24])
 
-    const ensureRunning = async () => {
+    const stopSequencer = () => {
+      if (intervalRef.current != null) {
+        window.clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      const musicGain = musicGainRef.current
       const ctx = ctxRef.current
-      if (!ctx) return
-      if (ctx.state === 'suspended') {
-        try {
-          await ctx.resume()
-        } catch {
-          // ignore
-        }
+      if (musicGain && ctx) {
+        // Quick fade-out so the cut isn't abrupt.
+        const now = ctx.currentTime
+        musicGain.gain.cancelScheduledValues(now)
+        musicGain.gain.setValueAtTime(musicGain.gain.value, now)
+        musicGain.gain.linearRampToValueAtTime(0.0001, now + 0.08)
       }
     }
 
-    const start = async () => {
-      if (startedRef.current) {
-        await ensureRunning()
-        return
+    const startSequencer = async () => {
+      const ctx = ctxRef.current
+      const musicGain = musicGainRef.current
+      if (!ctx || !musicGain) return
+
+      if (ctx.state === 'suspended') {
+        try { await ctx.resume() } catch { /* ignore */ }
       }
 
-      const AudioContextCtor = window.AudioContext
-      const ctx = new AudioContextCtor({ latencyHint: 'interactive' })
-      ctxRef.current = ctx
+      // If a previous sequencer is still running, stop it first.
+      if (intervalRef.current != null) {
+        window.clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
 
-      const master = ctx.createGain()
-      master.gain.setValueAtTime(0.18, ctx.currentTime) // overall volume
-      master.connect(ctx.destination)
-      masterRef.current = master
+      // Fade music back in.
+      const now = ctx.currentTime
+      musicGain.gain.cancelScheduledValues(now)
+      musicGain.gain.setValueAtTime(0.0001, now)
+      musicGain.gain.linearRampToValueAtTime(0.85, now + 0.18)
 
-      startedRef.current = true
       stepRef.current = 0
-      nextNoteTimeRef.current = ctx.currentTime + 0.05
+      nextNoteTimeRef.current = now + 0.06
 
       const scheduler = () => {
-        const ctxNow = ctx.currentTime
+        const c = ctxRef.current
+        const out = musicGainRef.current
+        if (!c || !out) return
+        const ctxNow = c.currentTime
         while (nextNoteTimeRef.current < ctxNow + scheduleAhead) {
           const step = stepRef.current
           const time = nextNoteTimeRef.current
@@ -166,59 +276,44 @@ export function BackgroundMusic() {
           const leadMidi = leadPattern[step % leadPattern.length]
           const bassMidi = bassPattern[step % bassPattern.length]
 
-          // Kick
           if (kickSteps.has(step % 32)) {
-            scheduleKick({ ctx, out: master, time, gain: 0.25 })
+            scheduleKick({ ctx: c, out, time, gain: 0.25 })
           }
 
-          // Bass
           if (bassMidi != null) {
             scheduleTone({
-              ctx,
-              out: master,
-              time,
+              ctx: c, out, time,
               freq: midiToFreq(bassMidi),
               duration: stepDur * 3.0,
               type: 'sawtooth',
               gain: 0.05,
-              attack: 0.004,
-              release: 0.08,
-              detuneCents: -6,
-              filterHz: 520,
+              attack: 0.004, release: 0.08,
+              detuneCents: -6, filterHz: 520,
             })
           }
 
-          // Lead
           if (leadMidi != null) {
             const accent = (step % 8 === 0) ? 1.0 : 0.82
             scheduleTone({
-              ctx,
-              out: master,
-              time,
+              ctx: c, out, time,
               freq: midiToFreq(leadMidi),
               duration: stepDur * 1.2,
               type: 'square',
               gain: 0.04 * accent,
-              attack: 0.002,
-              release: 0.05,
-              detuneCents: 7,
-              filterHz: 2200,
+              attack: 0.002, release: 0.05,
+              detuneCents: 7, filterHz: 2200,
             })
           }
 
-          // Very subtle "air" noise-ish via high-frequency triangle tick every 2 steps
           if (step % 2 === 0) {
             const g = 0.008 * (0.35 + 0.65 * clamp01(Math.sin(step * 1.7)))
             scheduleTone({
-              ctx,
-              out: master,
-              time,
+              ctx: c, out, time,
               freq: 4200,
               duration: stepDur * 0.4,
               type: 'triangle',
               gain: g,
-              attack: 0.001,
-              release: 0.02,
+              attack: 0.001, release: 0.02,
               filterHz: 5200,
             })
           }
@@ -229,50 +324,40 @@ export function BackgroundMusic() {
       }
 
       intervalRef.current = window.setInterval(scheduler, lookaheadMs)
-      await ensureRunning()
     }
 
-    const onFirstGesture = () => {
-      void start()
-    }
+    if (gameState === 'playing') {
+      void startSequencer()
+    } else {
+      stopSequencer()
 
-    // Start on first user interaction (autoplay-safe)
-    window.addEventListener('pointerdown', onFirstGesture, { once: true })
-    window.addEventListener('keydown', onFirstGesture, { once: true })
-    window.addEventListener('touchstart', onFirstGesture, { once: true, passive: true } as AddEventListenerOptions)
-
-    const onVisibility = () => {
-      if (!ctxRef.current) return
-      if (document.visibilityState === 'visible') void ensureRunning()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-
-    return () => {
-      window.removeEventListener('pointerdown', onFirstGesture)
-      window.removeEventListener('keydown', onFirstGesture)
-      window.removeEventListener('touchstart', onFirstGesture)
-      document.removeEventListener('visibilitychange', onVisibility)
-
-      if (intervalRef.current != null) {
-        window.clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-      masterRef.current?.disconnect()
-      masterRef.current = null
-
-      // Close audio context
-      const ctx = ctxRef.current
-      ctxRef.current = null
-      startedRef.current = false
-      if (ctx) {
-        try {
-          void ctx.close()
-        } catch {
-          // ignore
+      // Death sting on transition from 'playing' -> 'gameOver'.
+      if (prev === 'playing' && gameState === 'gameOver') {
+        const ctx = ctxRef.current
+        const master = masterRef.current
+        if (ctx && master) {
+          if (ctx.state === 'suspended') {
+            void ctx.resume().then(() => playDeathSound(ctx, master))
+          } else {
+            playDeathSound(ctx, master)
+          }
         }
       }
     }
-  }, [])
+  }, [gameState])
+
+  // ── Handle tab visibility: pause/resume context only while playing. ─────────
+  useEffect(() => {
+    const onVisibility = () => {
+      const ctx = ctxRef.current
+      if (!ctx) return
+      if (document.visibilityState === 'visible' && gameState === 'playing') {
+        void ctx.resume()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [gameState])
 
   return null
 }

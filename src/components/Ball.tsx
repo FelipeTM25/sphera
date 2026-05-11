@@ -30,12 +30,18 @@ const JUMP_VELOCITY = 20
 const COYOTE_TIME = 0.11        // seconds allowed to jump after leaving ground
 const JUMP_BUFFER_TIME = 0.12   // seconds jump can be queued before landing
 
-// Cylinder steering is tuned for "fluid" feel: target angular velocity with
+// Cylinder steering is tuned for "delicate" feel: target angular velocity with
 // exponential smoothing (frame-rate independent) + small substeps on long dt.
-const CYL_TURN_RESPONSE = 22.0  // 1/sec (higher = snappier, still smooth)
-const CYL_MAX_ANG_VEL = 6.2     // rad/sec
-const CYL_FORWARD_MULT = 0.84   // slightly faster inside tunnel
-const CYL_MAX_SPEED_ADD = 18    // cap forward speed inside tunnel over baseSpeed
+// Max angular velocity is scaled by radius so wider tunnels don't feel hyper-sensitive
+// (surface speed = radius * angVel, so we cap surface speed instead).
+const CYL_TURN_RESPONSE = 11.0       // 1/sec (lower = more weight / less snap)
+const CYL_TARGET_SURFACE_SPEED = 18  // target linear lateral surface speed (units/sec)
+const CYL_MIN_MAX_ANG_VEL = 2.6      // floor so very wide tunnels still feel responsive
+const CYL_MAX_MAX_ANG_VEL = 5.0      // ceiling so narrow tunnels never feel twitchy
+const CYL_FORWARD_MULT = 0.82        // forward speed multiplier inside tunnel
+const CYL_MAX_SPEED_ADD = 18         // cap forward speed inside tunnel over baseSpeed
+const CYL_WALL_CLEARANCE = 0.22      // small gap between ball surface and cylinder wall (visual)
+const CYL_ENTRY_BLEND = 0.6          // seconds to smoothly settle ball onto wall on entry
 
 const SPIKE_COUNT = 14
 const SPIKE_UP = new THREE.Vector3(0, 1, 0)
@@ -127,6 +133,9 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
   const cylThetaRef = useRef(-Math.PI / 2) // bottom by default
   const cylAngVelRef = useRef(0)
   const cylSectionRef = useRef<CylinderSection | null>(null)
+  // Smooth radial blend on entry so the ball "settles" onto the wall instead of teleporting.
+  const cylEntryRadiusRef = useRef(0)
+  const cylEntryBlendRef = useRef(1) // 0 = just entered, 1 = fully on the wall
 
   // ── Reset on game start ────────────────────────────────────────────────────
   useEffect(() => {
@@ -147,6 +156,8 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       cylThetaRef.current = -Math.PI / 2
       cylAngVelRef.current = 0
       cylSectionRef.current = null
+      cylEntryBlendRef.current = 1
+      cylEntryRadiusRef.current = 0
       setBallForm('normal')
     }
   }, [gameState, level])
@@ -204,10 +215,15 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         inCylinderRef.current = true
         cylSectionRef.current = activeCylinder
 
-        // Estimate angle based on current position relative to cylinder center.
-        const theta = Math.atan2(pos.y - activeCylinder.centerY, pos.x)
+        // Estimate starting radius and angle from current position relative to cylinder center.
+        const dx = pos.x
+        const dy = pos.y - activeCylinder.centerY
+        const startRadius = Math.sqrt(dx * dx + dy * dy)
+        const theta = Math.atan2(dy, dx)
         cylThetaRef.current = Number.isFinite(theta) ? theta : -Math.PI / 2
         cylAngVelRef.current = 0
+        cylEntryRadiusRef.current = Math.max(0.1, startRadius)
+        cylEntryBlendRef.current = 0 // start blending from current radius -> wall radius
 
         // Clear vertical/lateral velocities to avoid fighting constraints.
         vel.set(0, 0, 0)
@@ -222,10 +238,13 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
 
       const sec = activeCylinder
       const surfaceRadius = sec.radius
-      // Keep visuals inside the wall (glow/spikes). The physical radius is BALL_RADIUS,
-      // but the glow shell can protrude; reserve extra clearance.
-      const visualClearance = BALL_RADIUS * 0.95
-      const ballCenterRadius = Math.max(0.6, surfaceRadius - BALL_RADIUS - visualClearance)
+      // Ride close to the wall: just enough clearance for the spiky/glow shell.
+      const wallRideRadius = Math.max(0.6, surfaceRadius - BALL_RADIUS - CYL_WALL_CLEARANCE)
+      // Smooth radial settle on entry (frame-rate independent).
+      cylEntryBlendRef.current = Math.min(1, cylEntryBlendRef.current + dt / CYL_ENTRY_BLEND)
+      const easedBlend = cylEntryBlendRef.current * cylEntryBlendRef.current * (3 - 2 * cylEntryBlendRef.current) // smoothstep
+      const ballCenterRadius =
+        cylEntryRadiusRef.current + (wallRideRadius - cylEntryRadiusRef.current) * easedBlend
 
       // Slow down forward motion inside the tunnel for better control
       const tunnelFwd = Math.min(fwd * CYL_FORWARD_MULT, level.baseSpeed + CYL_MAX_SPEED_ADD)
@@ -234,8 +253,15 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       const left = input.current.has('ArrowLeft') || input.current.has('KeyA')
       const right = input.current.has('ArrowRight') || input.current.has('KeyD')
 
+      // Cap angular velocity so surface linear speed stays consistent regardless of radius.
+      const radiusForCap = Math.max(1.0, ballCenterRadius)
+      const maxAngVel = Math.min(
+        CYL_MAX_MAX_ANG_VEL,
+        Math.max(CYL_MIN_MAX_ANG_VEL, CYL_TARGET_SURFACE_SPEED / radiusForCap)
+      )
+
       const inputAxis = (right ? 1 : 0) - (left ? 1 : 0)
-      const desiredAngVel = inputAxis * CYL_MAX_ANG_VEL
+      const desiredAngVel = inputAxis * maxAngVel
 
       // Sub-step cylinder integration on long frames to avoid visible stutter.
       // Keeps motion + collision stable even if FPS dips.
@@ -288,6 +314,8 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         inCylinderRef.current = false
         cylSectionRef.current = null
         cylAngVelRef.current = 0
+        cylEntryBlendRef.current = 1
+        cylEntryRadiusRef.current = 0
         // Re-enter normal track at the bottom of the cylinder.
         cylThetaRef.current = -Math.PI / 2
         pos.x = 0
@@ -318,6 +346,8 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         inCylinderRef.current = false
         cylSectionRef.current = null
         cylAngVelRef.current = 0
+        cylEntryBlendRef.current = 1
+        cylEntryRadiusRef.current = 0
         setBallForm('normal')
       }
     }
