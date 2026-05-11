@@ -20,7 +20,7 @@ export function Game() {
       shadows
       camera={{ fov: 72, near: 0.1, far: 600, position: [0, 8, 14] }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
-      dpr={[1, 1.5]}
+      dpr={[1, 1.25]}
       style={{ background: '#050510' }}
     >
       <color attach="background" args={['#050510']} />

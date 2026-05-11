@@ -29,6 +29,7 @@ export interface LevelDef {
 export type TrackPiece =
   | { kind: 'solid'; segments: number; angle: number; widthMultiplier?: number }
   | { kind: 'gap'; segments: number }
+  | { kind: 'cylinder'; segments: number; radius: number }
 
 // wall: tall wall blocking half the track (dodge left/right)
 // pillar: single column in the middle or side (dodge)
@@ -62,10 +63,10 @@ export const LEVELS: LevelDef[] = [
     title: 'Principiante',
     difficultyLabel: 'Dificultad: Fácil',
     speed: 14,
-    baseSpeed: 28,
-    maxSpeed: 52,
-    acceleration: 0.40,
-    trackWidth: 9,
+    baseSpeed: 24,
+    maxSpeed: 46,
+    acceleration: 0.35,
+    trackWidth: 9.6,
     segmentLength: 14,
     segmentDepth: 1.0,
     start: { x: 0, y: 4, z: 2 },
@@ -86,12 +87,12 @@ export const LEVELS: LevelDef[] = [
       { kind: 'gap',   segments: 1 },                                        // GAP 11 ← jump 1
       { kind: 'solid', segments: 4, angle: 0.07 },                           // seg 12-15
       { kind: 'gap',   segments: 1 },                                        // GAP 16 ← jump 2
-      { kind: 'solid', segments: 4, angle: 0.10, widthMultiplier: 0.5 },    // seg 17-20 NARROW
-      { kind: 'solid', segments: 3, angle: 0.08, widthMultiplier: 0.5 },    // seg 21-23 NARROW
+      { kind: 'solid', segments: 4, angle: 0.10, widthMultiplier: 0.85 },   // seg 17-20 slightly narrow (forgiving)
+      { kind: 'solid', segments: 3, angle: 0.08, widthMultiplier: 0.85 },   // seg 21-23 slightly narrow (forgiving)
       { kind: 'solid', segments: 2, angle: 0.10 },                           // seg 24-25 full
       { kind: 'gap',   segments: 1 },                                        // GAP 26 ← jump 3
       { kind: 'solid', segments: 4, angle: 0.11 },                           // seg 27-30
-      { kind: 'solid', segments: 4, angle: 0.09, widthMultiplier: 0.5 },    // seg 31-34 NARROW
+      { kind: 'solid', segments: 4, angle: 0.09, widthMultiplier: 0.85 },   // seg 31-34 slightly narrow (forgiving)
       { kind: 'gap',   segments: 1 },                                        // GAP 35 ← jump 4
       { kind: 'solid', segments: 3, angle: 0.12 },                           // seg 36-38
       { kind: 'gap',   segments: 1 },                                        // GAP 39 ← jump 5
@@ -135,11 +136,11 @@ export const LEVELS: LevelDef[] = [
   {
     id: 2,
     title: 'Intermedio',
-    difficultyLabel: 'Dificultad: Medio',
+    difficultyLabel: 'Dificultad: Media',
     speed: 18,
-    baseSpeed: 35,
-    maxSpeed: 70,
-    acceleration: 0.70,
+    baseSpeed: 32,
+    maxSpeed: 68,
+    acceleration: 0.85,
     trackWidth: 8.5,
     segmentLength: 14,
     segmentDepth: 1.0,
@@ -157,6 +158,14 @@ export const LEVELS: LevelDef[] = [
       { kind: 'gap', segments: 1 },
       { kind: 'solid', segments: 4, angle: -0.12 },
       { kind: 'solid', segments: 10, angle: 0 },
+      // Extended run (longer + denser)
+      { kind: 'solid', segments: 4, angle: 0.10 },
+      { kind: 'gap', segments: 1 },
+      { kind: 'solid', segments: 4, angle: -0.08 },
+      // Special cylinder tunnel (360° dodge section)
+      { kind: 'cylinder', segments: 10, radius: 4.8 },
+      // Exit + finish stretch
+      { kind: 'solid', segments: 8, angle: 0 },
     ],
     obstacles: [
       { id: 'l2-wall-1', type: 'wall', segmentIndex: 4, x: -1.8 },
@@ -169,6 +178,17 @@ export const LEVELS: LevelDef[] = [
       { id: 'l2-wall-3', type: 'wall', segmentIndex: 7, x: 0.0 },
       { id: 'l2-pillar-2', type: 'pillar', segmentIndex: 13, x: 2.0 },
       { id: 'l2-gate-3', type: 'gate', segmentIndex: 30, x: 0.0 },
+
+      // Extra obstacles in the extended part (indices start at 39+)
+      { id: 'l2-lowwall-1', type: 'low_wall', segmentIndex: 40, x: 0.0 },
+      { id: 'l2-wall-4', type: 'wall', segmentIndex: 41, x: -1.6 },
+      { id: 'l2-pillar-3', type: 'pillar', segmentIndex: 42, x: 2.0 },
+      { id: 'l2-gate-4', type: 'gate', segmentIndex: 44, x: -2.0 },
+      { id: 'l2-wall-5', type: 'wall', segmentIndex: 46, x: 1.6 },
+      // After cylinder (solid starts at 58)
+      { id: 'l2-lowwall-2', type: 'low_wall', segmentIndex: 60, x: 0.0 },
+      { id: 'l2-gate-5', type: 'gate', segmentIndex: 62, x: 2.0 },
+      { id: 'l2-pillar-4', type: 'pillar', segmentIndex: 64, x: -2.0 },
     ],
     stars: [
       { id: 'l2-star-1', segmentIndex: 7, x: 0.0, yOffset: 1.6 },
@@ -181,39 +201,101 @@ export const LEVELS: LevelDef[] = [
     title: 'Experto',
     difficultyLabel: 'Dificultad: Difícil',
     speed: 22,
-    baseSpeed: 40,
-    maxSpeed: 80,
-    acceleration: 3.5,
-    trackWidth: 7.5,
+    baseSpeed: 44,
+    maxSpeed: 92,
+    acceleration: 1.35,
+    trackWidth: 7.2,
     segmentLength: 14,
     segmentDepth: 1.0,
     start: { x: 0, y: 4, z: 2 },
     pieces: [
-      { kind: 'solid', segments: 5, angle: 0 },
-      { kind: 'solid', segments: 2, angle: 0.18 },
-      { kind: 'solid', segments: 2, angle: -0.16 },
-      { kind: 'solid', segments: 3, angle: 0.12 },
-      { kind: 'solid', segments: 2, angle: -0.12 },
-      // Longer jump
+      // Long + mixed difficulty: narrow sections, multiple gaps, and 2 cylinder tunnels.
+      { kind: 'solid', segments: 6, angle: 0.00 },
+      { kind: 'solid', segments: 3, angle: 0.18 },
+      { kind: 'solid', segments: 2, angle: -0.14 },
+      { kind: 'solid', segments: 4, angle: 0.12, widthMultiplier: 0.85 },
+      { kind: 'gap',   segments: 1 },
+      { kind: 'solid', segments: 3, angle: -0.16, widthMultiplier: 0.85 },
       { kind: 'solid', segments: 2, angle: 0.22 },
-      { kind: 'gap', segments: 1 },
-      { kind: 'solid', segments: 4, angle: -0.14 },
-      // Final section
-      { kind: 'solid', segments: 10, angle: 0 },
+      { kind: 'gap',   segments: 1 },
+      { kind: 'solid', segments: 6, angle: -0.10 },
+      { kind: 'solid', segments: 4, angle: 0.15, widthMultiplier: 0.75 },
+      { kind: 'gap',   segments: 1 },
+      { kind: 'solid', segments: 3, angle: 0.18 },
+      // Cylinder 1 (spiky + 360° dodge)
+      { kind: 'cylinder', segments: 12, radius: 4.6 },
+      { kind: 'solid', segments: 5, angle: -0.12, widthMultiplier: 0.78 },
+      { kind: 'gap',   segments: 1 },
+      { kind: 'solid', segments: 6, angle: 0.10 },
+      { kind: 'solid', segments: 4, angle: -0.18, widthMultiplier: 0.70 },
+      { kind: 'gap',   segments: 1 },
+      { kind: 'solid', segments: 3, angle: 0.24, widthMultiplier: 0.70 },
+      { kind: 'gap',   segments: 1 },
+      { kind: 'solid', segments: 5, angle: -0.14 },
+      // Cylinder 2 (harder)
+      { kind: 'cylinder', segments: 14, radius: 4.4 },
+      // Final stretch
+      { kind: 'solid', segments: 10, angle: 0.00 },
     ],
     obstacles: [
-      { id: 'l3-wall-1', type: 'wall', segmentIndex: 3, x: 2.0 },
-      { id: 'l3-wall-2', type: 'wall', segmentIndex: 8, x: -2.0 },
-      { id: 'l3-pillar-1', type: 'pillar', segmentIndex: 11, x: 0.0 },
-      // segmentIndex 16 is a gap in this layout; move to the next solid segment.
-      { id: 'l3-gate-1', type: 'gate', segmentIndex: 17, x: 1.8 },
-      { id: 'l3-gate-2', type: 'gate', segmentIndex: 18, x: -1.8 },
-      { id: 'l3-pillar-2', type: 'pillar', segmentIndex: 21, x: 0.0 },
+      // Early pressure
+      { id: 'l3-barrier-1', type: 'barrier',  segmentIndex: 2,  x:  2.4 },
+      { id: 'l3-wall-1',    type: 'wall',     segmentIndex: 5,  x: -1.8 },
+      { id: 'l3-gate-1',    type: 'gate',     segmentIndex: 7,  x:  2.0 },
+
+      // Prep for first gap (gap at 15)
+      { id: 'l3-lowwall-1', type: 'low_wall', segmentIndex: 12, x:  0.0 },
+      { id: 'l3-barrier-2', type: 'barrier',  segmentIndex: 13, x: -2.0 },
+
+      // After gap, tighter steering
+      { id: 'l3-pillar-1',  type: 'pillar',   segmentIndex: 16, x:  0.0 },
+      { id: 'l3-wall-2',    type: 'wall',     segmentIndex: 18, x:  1.8 },
+      { id: 'l3-gate-2',    type: 'gate',     segmentIndex: 19, x:  1.8 },
+      { id: 'l3-gate-3',    type: 'gate',     segmentIndex: 20, x: -1.8 },
+
+      // Mid run (before gap at 32)
+      { id: 'l3-wall-3',    type: 'wall',     segmentIndex: 24, x:  0.0 },
+      { id: 'l3-pillar-2',  type: 'pillar',   segmentIndex: 27, x:  2.0 },
+      { id: 'l3-lowwall-2', type: 'low_wall', segmentIndex: 29, x:  0.0 },
+      { id: 'l3-barrier-3', type: 'barrier',  segmentIndex: 30, x:  1.8 },
+
+      // Lead-in to cylinder 1
+      { id: 'l3-gate-4',    type: 'gate',     segmentIndex: 34, x:  0.0 },
+      { id: 'l3-pillar-3',  type: 'pillar',   segmentIndex: 35, x: -2.0 },
+
+      // After cylinder 1 (gap at 53)
+      { id: 'l3-wall-4',    type: 'wall',     segmentIndex: 48, x: -1.8 },
+      { id: 'l3-lowwall-3', type: 'low_wall', segmentIndex: 51, x:  0.0 },
+      { id: 'l3-barrier-4', type: 'barrier',  segmentIndex: 52, x:  2.0 },
+
+      // Second half complexity
+      { id: 'l3-wall-5',    type: 'wall',     segmentIndex: 55, x:  1.8 },
+      { id: 'l3-gate-5',    type: 'gate',     segmentIndex: 57, x: -2.0 },
+      { id: 'l3-pillar-4',  type: 'pillar',   segmentIndex: 59, x:  0.0 },
+
+      // Narrow stress (wm=0.70 at 60-63)
+      { id: 'l3-barrier-5', type: 'barrier',  segmentIndex: 60, x:  1.6 },
+      { id: 'l3-wall-6',    type: 'wall',     segmentIndex: 62, x: -1.6, size: { w: 2.8, h: 1.1, d: 0.7 } },
+
+      // Low wall into a gap (gap at 68)
+      { id: 'l3-lowwall-4', type: 'low_wall', segmentIndex: 65, x:  0.0 },
+
+      // Final pre-cylinder gauntlet
+      { id: 'l3-gate-6',    type: 'gate',     segmentIndex: 70, x:  2.0 },
+      { id: 'l3-pillar-5',  type: 'pillar',   segmentIndex: 72, x: -2.0 },
+      { id: 'l3-wall-7',    type: 'wall',     segmentIndex: 73, x:  0.0 },
+
+      // Final stretch after cylinder 2
+      { id: 'l3-lowwall-5', type: 'low_wall', segmentIndex: 90, x:  0.0 },
+      { id: 'l3-wall-8',    type: 'wall',     segmentIndex: 92, x: -1.8 },
+      { id: 'l3-gate-7',    type: 'gate',     segmentIndex: 94, x:  2.0 },
+      { id: 'l3-barrier-6', type: 'barrier',  segmentIndex: 95, x: -2.0 },
+      { id: 'l3-pillar-6',  type: 'pillar',   segmentIndex: 96, x:  0.0 },
     ],
     stars: [
-      { id: 'l3-star-1', segmentIndex: 6, x: -1.6, yOffset: 1.6 },
-      { id: 'l3-star-2', segmentIndex: 14, x: 1.6, yOffset: 1.6 },
-      { id: 'l3-star-3', segmentIndex: 23, x: 0.0, yOffset: 1.7 },
+      { id: 'l3-star-1', segmentIndex: 26, x: -2.0, yOffset: 1.7 },
+      { id: 'l3-star-2', segmentIndex: 56, x:  2.0, yOffset: 1.7 },
+      { id: 'l3-star-3', segmentIndex: 91, x:  0.0, yOffset: 1.8 },
     ],
   },
 ]

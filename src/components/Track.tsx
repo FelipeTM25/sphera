@@ -3,8 +3,10 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { TrackSegment, type SegmentDef } from './TrackSegment'
 import { Obstacle } from './Obstacle'
+import { CylinderTunnel } from './CylinderTunnel'
 import { useGame } from '../store/gameStore'
 import type { LevelDef, ObstacleDef } from '../levels'
+import { computeCylinderSections } from '../cylinder'
 
 interface TrackProps {
   level: LevelDef
@@ -225,6 +227,12 @@ function buildLevelLayout(level: LevelDef) {
       continue
     }
 
+    if (piece.kind === 'cylinder') {
+      // Cylinder sections are rendered separately; they still advance timelineIndex.
+      timelineIndex += piece.segments
+      continue
+    }
+
     const wm = piece.widthMultiplier ?? 1
     const segW = W * wm
 
@@ -290,6 +298,7 @@ function buildLevelLayout(level: LevelDef) {
 export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: TrackProps) {
   const { gameState, runCollectedStars, collectStar, completeLevel } = useGame()
   const { segments, obstacles, stars, finishZ, finishY } = useMemo(() => buildLevelLayout(level), [level])
+  const cylinderSections = useMemo(() => computeCylinderSections(level), [level])
   const didCompleteRef = useRef(false)
 
   useEffect(() => {
@@ -345,6 +354,11 @@ export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: Trac
           onMeshReady={onTrackMeshReady}
           onMeshRemoved={onTrackMeshRemoved}
         />
+      ))}
+
+      {/* Cylinder tunnels (visual + gameplay zone) */}
+      {(gameState === 'playing' || gameState === 'levelComplete') && cylinderSections.map((section) => (
+        <CylinderTunnel key={`${level.id}:${section.startZ}`} section={section} />
       ))}
 
       {(gameState === 'playing' || gameState === 'levelComplete') && obstacles.map((obs) => (

@@ -8,14 +8,16 @@ interface CameraControllerProps {
 }
 
 const BASE_OFFSET = new THREE.Vector3(0, 5.5, 12)
-const BASE_LERP = 0.10
+// BASE_LERP was previously a per-frame lerp factor (FPS dependent).
+// Convert it into a per-second smoothing constant via exponential smoothing.
+const BASE_SMOOTHING = 6.3 // roughly matches 0.10 lerp @ ~60fps
 
 export function CameraController({ ballPosition }: CameraControllerProps) {
   const { currentLevel, currentSpeed } = useGame()
   const { camera } = useThree()
   const targetPos = useRef(new THREE.Vector3())
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const ball = ballPosition.current
     if (!ball) return
 
@@ -30,10 +32,10 @@ export function CameraController({ ballPosition }: CameraControllerProps) {
       ball.z + BASE_OFFSET.z + extraZ
     )
 
-    // Lerp speed increases slightly with speed for snappier high-speed tracking
-    const lerp = BASE_LERP + speedRatio * 0.04
-
-    camera.position.lerp(targetPos.current, lerp)
+    // Frame-rate independent smoothing (snappier at high speed)
+    const smoothing = BASE_SMOOTHING + speedRatio * 2.5
+    const t = 1 - Math.exp(-smoothing * Math.min(delta, 0.05))
+    camera.position.lerp(targetPos.current, t)
     camera.lookAt(ball.x * 0.3, ball.y + 1.2, ball.z - 5)
   })
 
