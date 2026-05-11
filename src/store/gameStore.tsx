@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { type LevelId, LEVELS, getLevelById } from '../levels'
 
-export type GameState = 'home' | 'levels' | 'records' | 'playing' | 'gameOver' | 'levelComplete'
+export type GameState = 'home' | 'levels' | 'records' | 'credits' | 'playing' | 'gameOver' | 'levelComplete'
 
 const STORAGE_KEY = 'sphera.progress.v1'
 
@@ -46,23 +46,38 @@ function safeSave(data: Persisted) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   } catch {
-    // ignore
+    // ignore write errors (private browsing, storage full, etc.)
   }
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+export interface RunStats {
+  elapsedSeconds: number
+  distanceMeters: number
+  stars: number
+  score: number
 }
 
 interface GameStore {
   gameState: GameState
   currentLevelId: LevelId
   unlockedMaxLevelId: LevelId
-  runCollectedStars: boolean[] // length 3
+  runCollectedStars: boolean[]
   bestStarsByLevel: Record<LevelId, number>
   currentSpeed: number
+  runStats: RunStats
 
   currentLevel: ReturnType<typeof getLevelById>
 
   goHome: () => void
   openLevels: () => void
   openRecords: () => void
+  openCredits: () => void
   selectLevel: (id: LevelId) => void
   startRun: () => void
   retryLevel: () => void
@@ -70,6 +85,7 @@ interface GameStore {
   completeLevel: () => void
   collectStar: (index: number) => void
   updateSpeed: (speed: number) => void
+  tickRun: (dt: number, forwardSpeed: number) => void
 }
 
 const GameContext = createContext<GameStore | null>(null)
@@ -82,47 +98,55 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [runCollectedStars, setRunCollectedStars] = useState<boolean[]>([false, false, false])
   const [bestStarsByLevel, setBestStarsByLevel] = useState<Record<LevelId, number>>(persisted?.bestStarsByLevel ?? ({ 1: 0, 2: 0, 3: 0 } as Record<LevelId, number>))
   const [currentSpeed, setCurrentSpeed] = useState(0)
+  const [runStats, setRunStats] = useState<RunStats>({ elapsedSeconds: 0, distanceMeters: 0, stars: 0, score: 0 })
+
+  // Mutable accumulator — updated every frame without triggering re-renders
+  const runAccRef = useRef({ elapsed: 0, distance: 0 })
 
   const currentLevel = useMemo(() => getLevelById(currentLevelId), [currentLevelId])
 
-  const goHome = useCallback(() => {
-    setGameState('home')
-  }, [])
+  const goHome = useCallback(() => setGameState('home'), [])
+  const openLevels = useCallback(() => setGameState('levels'), [])
+  const openRecords = useCallback(() => setGameState('records'), [])
+  const openCredits = useCallback(() => setGameState('credits'), [])
+  const selectLevel = useCallback((id: LevelId) => setCurrentLevelId(id), [])
 
-  const openLevels = useCallback(() => {
-    setGameState('levels')
-  }, [])
-
-  const openRecords = useCallback(() => {
-    setGameState('records')
-  }, [])
-
-  const selectLevel = useCallback((id: LevelId) => {
-    setCurrentLevelId(id)
-  }, [])
-
+  // Persist progress whenever relevant state changes
   useEffect(() => {
-    safeSave({
-      unlockedMaxLevelId,
-      bestStarsByLevel,
-      lastLevelId: currentLevelId,
-    })
+    safeSave({ unlockedMaxLevelId, bestStarsByLevel, lastLevelId: currentLevelId })
   }, [unlockedMaxLevelId, bestStarsByLevel, currentLevelId])
+
+  const resetRunAcc = useCallback(() => {
+    runAccRef.current = { elapsed: 0, distance: 0 }
+    setRunStats({ elapsedSeconds: 0, distanceMeters: 0, stars: 0, score: 0 })
+  }, [])
 
   const startRun = useCallback(() => {
     setRunCollectedStars([false, false, false])
+    resetRunAcc()
     setGameState('playing')
-  }, [])
+  }, [resetRunAcc])
 
   const retryLevel = useCallback(() => {
     setRunCollectedStars([false, false, false])
+    resetRunAcc()
     setGameState('playing')
+  }, [resetRunAcc])
+
+  // Called every frame from Ball.tsx to accumulate run stats without re-renders
+  const tickRun = useCallback((dt: number, forwardSpeed: number) => {
+    runAccRef.current.elapsed += dt
+    runAccRef.current.distance += forwardSpeed * dt
   }, [])
 
   const endGame = useCallback(() => {
     setCurrentSpeed(0)
+    const { elapsed, distance } = runAccRef.current
+    const stars = runCollectedStars.filter(Boolean).length
+    const score = Math.round(distance * 2 + stars * 500)
+    setRunStats({ elapsedSeconds: elapsed, distanceMeters: distance, stars, score })
     setGameState('gameOver')
-  }, [])
+  }, [runCollectedStars])
 
   const updateSpeed = useCallback((speed: number) => {
     setCurrentSpeed(Math.round(speed))
@@ -132,13 +156,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const stars = runCollectedStars.filter(Boolean).length
     setBestStarsByLevel((prev) => ({ ...prev, [currentLevelId]: Math.max(prev[currentLevelId], stars) }))
 
-    // Unlock next level if exists
     const next = (currentLevelId + 1) as LevelId
     const hasNext = LEVELS.some((l) => l.id === next)
     if (hasNext) {
       setUnlockedMaxLevelId((prev) => (prev < next ? next : prev))
     }
 
+    const { elapsed, distance } = runAccRef.current
+    const score = Math.round(distance * 2 + stars * 500)
+    setRunStats({ elapsedSeconds: elapsed, distanceMeters: distance, stars, score })
     setGameState('levelComplete')
   }, [currentLevelId, runCollectedStars])
 
@@ -160,10 +186,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       runCollectedStars,
       bestStarsByLevel,
       currentSpeed,
+      runStats,
       currentLevel,
       goHome,
       openLevels,
       openRecords,
+      openCredits,
       selectLevel,
       startRun,
       retryLevel,
@@ -171,6 +199,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       completeLevel,
       collectStar,
       updateSpeed,
+      tickRun,
     }}>
       {children}
     </GameContext.Provider>
@@ -182,3 +211,5 @@ export function useGame() {
   if (!ctx) throw new Error('useGame must be inside GameProvider')
   return ctx
 }
+
+export { formatTime }

@@ -7,13 +7,12 @@ import { CylinderTunnel } from './CylinderTunnel'
 import { useGame } from '../store/gameStore'
 import type { LevelDef, ObstacleDef } from '../levels'
 import { computeCylinderSections } from '../cylinder'
+import { playStarCollect } from '../audio'
 
 interface TrackProps {
   level: LevelDef
   ballPosition: React.MutableRefObject<THREE.Vector3>
-  /** Out-ref: filled with floor mesh refs for ball raycasting */
   trackMeshes: React.MutableRefObject<THREE.Mesh[]>
-  /** Out-ref: filled with obstacle mesh refs for ball collision */
   obstacleMeshes: React.MutableRefObject<THREE.Mesh[]>
 }
 
@@ -22,14 +21,13 @@ function obstacleSizeFor(level: LevelDef, def: ObstacleDef, segmentWidth: number
   switch (def.type) {
     case 'pillar':   return [1.1, 2.2, 1.1]
     case 'gate':     return [1.4, 1.2, 0.7]
-    case 'low_wall': return [segmentWidth * 0.95, 0.6, 0.85]  // spans actual segment width
+    case 'low_wall': return [segmentWidth * 0.95, 0.6, 0.85]
     case 'ramp':     return [segmentWidth * 0.55, 0.75, 2.8]
     case 'barrier':  return [segmentWidth * 0.48, 1.8, 0.75]
-    default:         return [level.trackWidth * 0.55, 1.1, 0.7]   // wall: always half full width
+    default:         return [level.trackWidth * 0.55, 1.1, 0.7]
   }
 }
 
-// ── Star shape helper ─────────────────────────────────────────────────────────
 function createStarShape(outerR: number, innerR: number, points: number): THREE.Shape {
   const shape = new THREE.Shape()
   const step = Math.PI / points
@@ -54,13 +52,11 @@ const _starExtrudeSettings: THREE.ExtrudeGeometryOptions = {
   bevelSegments: 2,
 }
 
-// Reusable star geometry (created once)
+// Shared star geometry (created once, reused by all Star3D instances)
 const STAR_GEO = new THREE.ExtrudeGeometry(_starShape, _starExtrudeSettings)
 STAR_GEO.center()
 STAR_GEO.computeBoundingSphere()
 
-// ── Finish arch helpers ───────────────────────────────────────────────────────
-// Checkerboard pattern for finish flag using canvas texture
 function makeCheckerTexture(cols: number, rows: number, cellSize = 32): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
   canvas.width = cols * cellSize
@@ -79,7 +75,6 @@ function makeCheckerTexture(cols: number, rows: number, cellSize = 32): THREE.Ca
 
 const CHECKER_TEX = makeCheckerTexture(8, 4)
 
-// ── Star component (animated rotation) ───────────────────────────────────────
 function Star3D({ position, index }: { position: THREE.Vector3; index: number }) {
   const groupRef = useRef<THREE.Group>(null!)
 
@@ -90,7 +85,6 @@ function Star3D({ position, index }: { position: THREE.Vector3; index: number })
     }
   })
 
-  // Stagger initial rotation per star
   const initRotY = (index * Math.PI * 2) / 3
 
   return (
@@ -99,7 +93,6 @@ function Star3D({ position, index }: { position: THREE.Vector3; index: number })
       position={[position.x, position.y, position.z]}
       rotation={[0, initRotY, 0]}
     >
-      {/* Main star body */}
       <mesh geometry={STAR_GEO} castShadow>
         <meshStandardMaterial
           color="#ffd700"
@@ -109,11 +102,9 @@ function Star3D({ position, index }: { position: THREE.Vector3; index: number })
           roughness={0.2}
         />
       </mesh>
-      {/* Inner bright core */}
       <mesh geometry={STAR_GEO} scale={0.6}>
         <meshBasicMaterial color="#fffacd" />
       </mesh>
-      {/* Outer glow shell — compensates visually for removed pointLight */}
       <mesh geometry={STAR_GEO} scale={2.0}>
         <meshBasicMaterial color="#ffd700" transparent opacity={0.13} side={THREE.BackSide} />
       </mesh>
@@ -121,7 +112,6 @@ function Star3D({ position, index }: { position: THREE.Vector3; index: number })
   )
 }
 
-// ── Finish arch component (animated) ─────────────────────────────────────────
 function FinishArch({
   width,
   y,
@@ -135,11 +125,9 @@ function FinishArch({
   const flagRef = useRef<THREE.Group>(null!)
 
   useFrame(({ clock }) => {
-    // Pulse the crossbar emissive
     if (pulsRef.current) {
       pulsRef.current.emissiveIntensity = 0.5 + Math.sin(clock.elapsedTime * 3) * 0.3
     }
-    // Gentle flag wave (oscillate Y rotation)
     if (flagRef.current) {
       flagRef.current.rotation.y = Math.sin(clock.elapsedTime * 2.5) * 0.18
     }
@@ -152,18 +140,15 @@ function FinishArch({
 
   return (
     <group position={[0, y, z]}>
-      {/* Left post */}
       <mesh position={[-halfW, postH / 2 - 0.5, 0]} castShadow>
         <cylinderGeometry args={[postR, postR + 0.05, postH, 16]} />
         <meshStandardMaterial color="#e8e8e8" metalness={0.9} roughness={0.15} />
       </mesh>
-      {/* Right post */}
       <mesh position={[halfW, postH / 2 - 0.5, 0]} castShadow>
         <cylinderGeometry args={[postR, postR + 0.05, postH, 16]} />
         <meshStandardMaterial color="#e8e8e8" metalness={0.9} roughness={0.15} />
       </mesh>
 
-      {/* Crossbar */}
       <mesh position={[0, postH - 0.5, 0]} castShadow>
         <boxGeometry args={[width + postR * 2, crossbarH, postR * 2]} />
         <meshStandardMaterial
@@ -176,7 +161,6 @@ function FinishArch({
         />
       </mesh>
 
-      {/* Checkerboard flag banner hanging below crossbar */}
       <group ref={flagRef} position={[0, postH - 1.2, 0.15]}>
         <mesh>
           <planeGeometry args={[width * 0.82, 1.4]} />
@@ -189,7 +173,6 @@ function FinishArch({
         </mesh>
       </group>
 
-      {/* "META" label — thin glowing strip */}
       <mesh position={[0, postH + 0.35, 0]}>
         <boxGeometry args={[2.4, 0.5, 0.1]} />
         <meshStandardMaterial
@@ -201,7 +184,6 @@ function FinishArch({
         />
       </mesh>
 
-      {/* Ambient point lights to illuminate the arch */}
       <pointLight position={[0, postH, 1]} color="#00f5ff" intensity={2.5} distance={14} />
       <pointLight position={[-halfW, 1, 0]} color="#ffffff" intensity={0.8} distance={8} />
       <pointLight position={[halfW, 1, 0]} color="#ffffff" intensity={0.8} distance={8} />
@@ -228,7 +210,6 @@ function buildLevelLayout(level: LevelDef) {
     }
 
     if (piece.kind === 'cylinder') {
-      // Cylinder sections are rendered separately; they still advance timelineIndex.
       timelineIndex += piece.segments
       continue
     }
@@ -265,7 +246,7 @@ function buildLevelLayout(level: LevelDef) {
     .map((def) => {
       const seg = solidByTimelineIndex.get(def.segmentIndex)
       if (!seg) return null
-      const segmentWidth = seg.size[0]  // actual width (respects widthMultiplier)
+      const segmentWidth = seg.size[0]
       const size = obstacleSizeFor(level, def, segmentWidth)
       const y = seg.position[1] + level.segmentDepth / 2 + size[1] / 2 + 0.05
       return {
@@ -305,7 +286,6 @@ export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: Trac
     didCompleteRef.current = false
   }, [gameState, level.id])
 
-  // ── Mesh registry callbacks ────────────────────────────────────────────────
   const onTrackMeshReady = useCallback((mesh: THREE.Mesh) => {
     trackMeshes.current.push(mesh)
   }, [trackMeshes])
@@ -324,21 +304,18 @@ export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: Trac
     if (idx !== -1) obstacleMeshes.current.splice(idx, 1)
   }, [obstacleMeshes])
 
-  // Registries are cleared by TrackSegment/Obstacle unmounts.
-
   useFrame(() => {
     if (gameState !== 'playing') return
     const ball = ballPosition.current
 
-    // Collect stars
     for (const star of stars) {
       if (runCollectedStars[star.index]) continue
       if (ball.distanceToSquared(star.position) < 1.25 * 1.25) {
         collectStar(star.index)
+        playStarCollect()
       }
     }
 
-    // Finish line
     if (!didCompleteRef.current && ball.z < finishZ) {
       didCompleteRef.current = true
       completeLevel()
@@ -356,7 +333,6 @@ export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: Trac
         />
       ))}
 
-      {/* Cylinder tunnels (visual + gameplay zone) */}
       {(gameState === 'playing' || gameState === 'levelComplete') && cylinderSections.map((section) => (
         <CylinderTunnel key={`${level.id}:${section.startZ}`} section={section} />
       ))}
@@ -367,21 +343,18 @@ export function Track({ level, ballPosition, trackMeshes, obstacleMeshes }: Trac
           position={obs.position}
           size={obs.size}
           type={obs.type}
-          // Ramps are visual-only: rotated box geometry breaks AABB collision,
-          // and ramps are meant to launch the ball, not kill it.
+          // Ramps are visual-only: rotated geometry breaks AABB, and ramps launch rather than kill
           onMeshReady={obs.type === 'ramp' ? undefined : onObstacleMeshReady}
           onMeshRemoved={obs.type === 'ramp' ? undefined : onObstacleMeshRemoved}
         />
       ))}
 
-      {/* Stars — 3D 5-point star geometry with rotation animation */}
       {(gameState === 'playing' || gameState === 'levelComplete') && stars.map((s) =>
         runCollectedStars[s.index]
           ? null
           : <Star3D key={s.id} position={s.position} index={s.index} />
       )}
 
-      {/* Finish arch — visible during play and on level complete */}
       {(gameState === 'playing' || gameState === 'levelComplete') && (
         <FinishArch width={level.trackWidth * 0.9} y={finishY} z={finishZ} />
       )}

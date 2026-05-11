@@ -9,39 +9,35 @@ import { computeCylinderSections, cylinderAngleDelta, isInsideCylinder, type Cyl
 interface BallProps {
   level: LevelDef
   onPositionUpdate: (pos: THREE.Vector3) => void
-  /** Refs to all track meshes for floor raycasting */
   trackMeshes: React.MutableRefObject<THREE.Mesh[]>
-  /** Refs to all obstacle meshes for collision */
   obstacleMeshes: React.MutableRefObject<THREE.Mesh[]>
 }
 
-// ─── Tuning ──────────────────────────────────────────────────────────────────
-const GRAVITY = 45          // units/sec²
-const LATERAL_ACCEL = 140     // lateral acceleration (units/sec²)
-const LATERAL_FRICTION = 9.5  // higher = stronger damping (units: 1/sec)
-const LATERAL_MAX_SPEED = 15  // cap for controllability
+// Physics tuning constants
+const GRAVITY = 45
+const LATERAL_ACCEL = 140
+const LATERAL_FRICTION = 9.5
+const LATERAL_MAX_SPEED = 15
 const BALL_RADIUS = 0.5
-const GROUND_TOLERANCE = 0.18  // how close to floor = "on ground" (absorbs 1 frame of fall)
-const MAX_GROUND_SNAP_UP = 1.25 // max upward correction allowed when grounding (prevents snapping back after falling)
-const RAY_FAR = 80             // long enough for any drop height
-const HUD_UPDATE_INTERVAL = 0.05  // seconds between store speed updates (perf)
+const GROUND_TOLERANCE = 0.18
+const MAX_GROUND_SNAP_UP = 1.25
+const RAY_FAR = 80
+const HUD_UPDATE_INTERVAL = 0.05
 
 const JUMP_VELOCITY = 20
-const COYOTE_TIME = 0.11        // seconds allowed to jump after leaving ground
-const JUMP_BUFFER_TIME = 0.12   // seconds jump can be queued before landing
+const COYOTE_TIME = 0.11
+const JUMP_BUFFER_TIME = 0.12
 
-// Cylinder steering is tuned for "delicate" feel: target angular velocity with
-// exponential smoothing (frame-rate independent) + small substeps on long dt.
-// Max angular velocity is scaled by radius so wider tunnels don't feel hyper-sensitive
-// (surface speed = radius * angVel, so we cap surface speed instead).
-const CYL_TURN_RESPONSE = 11.0       // 1/sec (lower = more weight / less snap)
-const CYL_TARGET_SURFACE_SPEED = 18  // target linear lateral surface speed (units/sec)
-const CYL_MIN_MAX_ANG_VEL = 2.6      // floor so very wide tunnels still feel responsive
-const CYL_MAX_MAX_ANG_VEL = 5.0      // ceiling so narrow tunnels never feel twitchy
-const CYL_FORWARD_MULT = 0.82        // forward speed multiplier inside tunnel
-const CYL_MAX_SPEED_ADD = 18         // cap forward speed inside tunnel over baseSpeed
-const CYL_WALL_CLEARANCE = 0.22      // small gap between ball surface and cylinder wall (visual)
-const CYL_ENTRY_BLEND = 0.6          // seconds to smoothly settle ball onto wall on entry
+// Cylinder steering tuning: exponential smoothing keeps turn feel FPS-independent.
+// Surface speed cap (not angular) so wider tunnels don't feel hyper-sensitive.
+const CYL_TURN_RESPONSE = 11.0
+const CYL_TARGET_SURFACE_SPEED = 18
+const CYL_MIN_MAX_ANG_VEL = 2.6
+const CYL_MAX_MAX_ANG_VEL = 5.0
+const CYL_FORWARD_MULT = 0.82
+const CYL_MAX_SPEED_ADD = 18
+const CYL_WALL_CLEARANCE = 0.22
+const CYL_ENTRY_BLEND = 0.6
 
 const SPIKE_COUNT = 14
 const SPIKE_UP = new THREE.Vector3(0, 1, 0)
@@ -97,47 +93,46 @@ function Spikes({ radius }: { radius: number }) {
   return <instancedMesh ref={ref} args={[geo, mat, SPIKE_COUNT]} />
 }
 
-// ─── Raycaster ───────────────────────────────────────────────────────────────
+// Shared raycaster (avoids per-frame allocations)
 const _raycaster = new THREE.Raycaster()
 const _rayOrigin = new THREE.Vector3()
 const _rayDir = new THREE.Vector3(0, -1, 0)
 const _outPos = new THREE.Vector3()
 
 export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: BallProps) {
-  const { gameState, endGame, updateSpeed } = useGame()
+  const { gameState, endGame, updateSpeed, tickRun } = useGame()
   const input = useInput()
 
   const [ballForm, setBallForm] = useState<'normal' | 'spiky'>('normal')
 
   const cylinderSections = useMemo(() => computeCylinderSections(level), [level])
 
-  // ── State refs (avoid re-renders) ──────────────────────────────────────────
+  // State refs avoid re-renders on every frame
   const posRef = useRef(new THREE.Vector3(level.start.x, level.start.y, level.start.z))
-  const velRef = useRef(new THREE.Vector3(0, 0, 0))   // x=lateral, y=vertical, z=unused (manual forward)
-  const speedRef = useRef(level.baseSpeed)             // current forward speed
+  const velRef = useRef(new THREE.Vector3(0, 0, 0))
+  const speedRef = useRef(level.baseSpeed)
   const aliveTimer = useRef(0)
   const deadRef = useRef(false)
   const onGroundRef = useRef(false)
   const hudTimer = useRef(0)
   const groupRef = useRef<THREE.Group>(null!)
 
-  // Jump/grounding helpers
   const wasJumpHeldRef = useRef(false)
   const coyoteTimerRef = useRef(0)
   const jumpBufferRef = useRef(0)
   const prevGroundYRef = useRef<number | null>(null)
   const lastGroundVyRef = useRef(0)
 
-  // Cylinder mode
+  // Cylinder mode state
   const inCylinderRef = useRef(false)
-  const cylThetaRef = useRef(-Math.PI / 2) // bottom by default
+  const cylThetaRef = useRef(-Math.PI / 2)
   const cylAngVelRef = useRef(0)
   const cylSectionRef = useRef<CylinderSection | null>(null)
-  // Smooth radial blend on entry so the ball "settles" onto the wall instead of teleporting.
+  // Smooth radial blend so ball "settles" onto wall instead of snapping
   const cylEntryRadiusRef = useRef(0)
-  const cylEntryBlendRef = useRef(1) // 0 = just entered, 1 = fully on the wall
+  const cylEntryBlendRef = useRef(1)
 
-  // ── Reset on game start ────────────────────────────────────────────────────
+  // Reset all state when a new run starts
   useEffect(() => {
     if (gameState === 'playing') {
       posRef.current.set(level.start.x, level.start.y, level.start.z)
@@ -162,7 +157,7 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     }
   }, [gameState, level])
 
-  // ── Jump input: Direct event listener for zero-delay discrete presses ──
+  // Direct event listener for zero-delay jump registration
   useEffect(() => {
     const onJumpDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !e.repeat) {
@@ -186,18 +181,17 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     }
   }, [])
 
-  // ── Obstacle detection helpers ─────────────────────────────────────────────
+  // Reusable vectors for obstacle AABB checks (avoids allocations)
   const obsBoxMin = useRef(new THREE.Vector3())
   const obsBoxMax = useRef(new THREE.Vector3())
   const obsWorldPos = useRef(new THREE.Vector3())
   const obsBox = useRef(new THREE.Box3())
 
-  // ── Main loop ─────────────────────────────────────────────────────────────
   useFrame((_, delta) => {
     if (gameState !== 'playing') return
     if (deadRef.current) return
 
-    // Slightly higher clamp avoids "slow motion" if FPS dips briefly.
+    // Clamp delta to avoid "slow motion" on FPS dips
     const dt = Math.min(delta, 0.08)
     aliveTimer.current += dt
 
@@ -206,19 +200,21 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
 
     const wasOnGround = onGroundRef.current
 
-    // Decay the jump buffer over time
     if (jumpBufferRef.current > 0) {
       jumpBufferRef.current -= dt
     }
 
-    // 1. Accelerate forward speed progressively
+    // Accelerate forward speed progressively
     speedRef.current = Math.min(
       speedRef.current + level.acceleration * dt,
       level.maxSpeed
     )
     const fwd = speedRef.current
 
-    // Detect cylinder section (if any)
+    // Accumulate run stats (time + distance) every frame
+    tickRun(dt, fwd)
+
+    // Find active cylinder section (if any)
     let activeCylinder: CylinderSection | null = null
     for (const sec of cylinderSections) {
       if (isInsideCylinder(sec, pos.z)) {
@@ -227,14 +223,12 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       }
     }
 
-    // ── Cylinder mode update ───────────────────────────────────────────────
     if (activeCylinder) {
       // Transition into cylinder
       if (!inCylinderRef.current || cylSectionRef.current !== activeCylinder) {
         inCylinderRef.current = true
         cylSectionRef.current = activeCylinder
 
-        // Estimate starting radius and angle from current position relative to cylinder center.
         const dx = pos.x
         const dy = pos.y - activeCylinder.centerY
         const startRadius = Math.sqrt(dx * dx + dy * dy)
@@ -242,9 +236,9 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         cylThetaRef.current = Number.isFinite(theta) ? theta : -Math.PI / 2
         cylAngVelRef.current = 0
         cylEntryRadiusRef.current = Math.max(0.1, startRadius)
-        cylEntryBlendRef.current = 0 // start blending from current radius -> wall radius
+        cylEntryBlendRef.current = 0
 
-        // Clear vertical/lateral velocities to avoid fighting constraints.
+        // Clear velocities to avoid fighting the cylinder constraints
         vel.set(0, 0, 0)
         prevGroundYRef.current = null
         lastGroundVyRef.current = 0
@@ -257,22 +251,19 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
 
       const sec = activeCylinder
       const surfaceRadius = sec.radius
-      // Ride close to the wall: just enough clearance for the spiky/glow shell.
       const wallRideRadius = Math.max(0.6, surfaceRadius - BALL_RADIUS - CYL_WALL_CLEARANCE)
-      // Smooth radial settle on entry (frame-rate independent).
+      // Smoothstep blend from entry radius → wall radius
       cylEntryBlendRef.current = Math.min(1, cylEntryBlendRef.current + dt / CYL_ENTRY_BLEND)
-      const easedBlend = cylEntryBlendRef.current * cylEntryBlendRef.current * (3 - 2 * cylEntryBlendRef.current) // smoothstep
+      const easedBlend = cylEntryBlendRef.current * cylEntryBlendRef.current * (3 - 2 * cylEntryBlendRef.current)
       const ballCenterRadius =
         cylEntryRadiusRef.current + (wallRideRadius - cylEntryRadiusRef.current) * easedBlend
 
-      // Slow down forward motion inside the tunnel for better control
       const tunnelFwd = Math.min(fwd * CYL_FORWARD_MULT, level.baseSpeed + CYL_MAX_SPEED_ADD)
 
-      // Angular controls (left/right): rotate around cylinder
       const left = input.current.has('ArrowLeft') || input.current.has('KeyA')
       const right = input.current.has('ArrowRight') || input.current.has('KeyD')
 
-      // Cap angular velocity so surface linear speed stays consistent regardless of radius.
+      // Cap angular velocity so surface speed stays consistent across different radii
       const radiusForCap = Math.max(1.0, ballCenterRadius)
       const maxAngVel = Math.min(
         CYL_MAX_MAX_ANG_VEL,
@@ -282,24 +273,20 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       const inputAxis = (right ? 1 : 0) - (left ? 1 : 0)
       const desiredAngVel = inputAxis * maxAngVel
 
-      // Sub-step cylinder integration on long frames to avoid visible stutter.
-      // Keeps motion + collision stable even if FPS dips.
+      // Sub-steps keep collision stable even when FPS dips
       const maxStep = 0.02
       const steps = Math.min(6, Math.max(1, Math.ceil(dt / maxStep)))
       const stepDt = dt / steps
 
       let rotX = 0
       let rotZ = 0
-      const ballArc = BALL_RADIUS / Math.max(1.0, ballCenterRadius)
+      const ballArc = (BALL_RADIUS * 0.7) / Math.max(1.0, ballCenterRadius)
 
       for (let s = 0; s < steps; s++) {
-        // Exponential smoothing toward desired angular velocity (FPS independent)
         const a = 1 - Math.exp(-CYL_TURN_RESPONSE * stepDt)
         cylAngVelRef.current = cylAngVelRef.current + (desiredAngVel - cylAngVelRef.current) * a
 
-        // Integrate angle + forward
         cylThetaRef.current += cylAngVelRef.current * stepDt
-        // Keep theta bounded to avoid numeric drift.
         cylThetaRef.current = cylinderAngleDelta(cylThetaRef.current, 0)
 
         pos.x = Math.cos(cylThetaRef.current) * ballCenterRadius
@@ -309,7 +296,6 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         rotX += tunnelFwd * stepDt * 0.55
         rotZ += cylAngVelRef.current * stepDt * 0.9
 
-        // Collision vs cylinder obstacles
         for (const obs of sec.obstacles) {
           const dz = Math.abs(pos.z - obs.z)
           if (dz > obs.depth * 0.5 + BALL_RADIUS) continue
@@ -324,18 +310,16 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
           }
         }
 
-        // Exit cylinder mid-step if we pass beyond endZ
         if (pos.z < sec.endZ) break
       }
 
-      // Exit cylinder: once we pass beyond endZ
+      // Exit cylinder when ball passes the end
       if (pos.z < sec.endZ) {
         inCylinderRef.current = false
         cylSectionRef.current = null
         cylAngVelRef.current = 0
         cylEntryBlendRef.current = 1
         cylEntryRadiusRef.current = 0
-        // Re-enter normal track at the bottom of the cylinder.
         cylThetaRef.current = -Math.PI / 2
         pos.x = 0
         pos.y = sec.surfaceY + BALL_RADIUS
@@ -343,14 +327,12 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         setBallForm('normal')
       }
 
-      // Visual update
       if (groupRef.current) {
         groupRef.current.position.copy(pos)
         groupRef.current.rotation.x -= rotX
         groupRef.current.rotation.z -= rotZ
       }
 
-      // Report position + HUD speed
       _outPos.copy(pos)
       onPositionUpdate(_outPos)
       hudTimer.current += dt
@@ -360,7 +342,7 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       }
       return
     } else {
-      // If we were in cylinder and left its bounds (should be rare), normalize.
+      // Normalize if we somehow left the cylinder without a clean exit
       if (inCylinderRef.current) {
         inCylinderRef.current = false
         cylSectionRef.current = null
@@ -371,36 +353,30 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       }
     }
 
-    // 2. Lateral steering with smooth acceleration
+    // Lateral steering
     if (input.current.has('ArrowLeft') || input.current.has('KeyA')) {
       vel.x -= LATERAL_ACCEL * dt
     }
     if (input.current.has('ArrowRight') || input.current.has('KeyD')) {
       vel.x += LATERAL_ACCEL * dt
     }
-    // Lateral damping (frame-rate independent)
+    // Frame-rate independent lateral damping
     const lateralDamp = Math.exp(-LATERAL_FRICTION * dt)
     vel.x *= lateralDamp
-    // Cap lateral speed for consistent control
     if (vel.x > LATERAL_MAX_SPEED) vel.x = LATERAL_MAX_SPEED
     if (vel.x < -LATERAL_MAX_SPEED) vel.x = -LATERAL_MAX_SPEED
 
-    // 3. Gravity (always) — grounding resolution below will cancel downward motion.
     vel.y -= GRAVITY * dt
 
-    // Coyote timer: refreshed while grounded, counts down in air
+    // Coyote time: lets player jump briefly after leaving an edge
     if (wasOnGround) coyoteTimerRef.current = COYOTE_TIME
     else if (coyoteTimerRef.current > 0) coyoteTimerRef.current = Math.max(0, coyoteTimerRef.current - dt)
 
-    // 4. Integrate position
     pos.x += vel.x * dt
     pos.y += vel.y * dt
-    pos.z -= fwd * dt  // forward always negative Z
+    pos.z -= fwd * dt
 
-    // 5. No lateral clamping — ball can fall off the edges naturally
-
-    // 6. Floor detection via downward raycast at the NEW position
-    // Ray starts above the ball to avoid tunneling if it falls very fast.
+    // Floor detection: ray starts above ball to survive fast falls
     _rayOrigin.set(pos.x, pos.y + 6, pos.z)
     _raycaster.set(_rayOrigin, _rayDir)
     _raycaster.far = RAY_FAR
@@ -409,21 +385,17 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     let grounded = false
 
     if (hits.length > 0) {
-      const floorY = hits[0].point.y          // world-space Y of track surface
-      const targetY = floorY + BALL_RADIUS    // where ball center must sit
+      const floorY = hits[0].point.y
+      const targetY = floorY + BALL_RADIUS
 
-      // Ball is "on ground" if its center is within GROUND_TOLERANCE above targetY, or penetrating
       if (pos.y <= targetY + GROUND_TOLERANCE) {
         const snapUp = targetY - pos.y
-        // If we're far below the surface, ignore grounding; keep falling.
-        // This prevents "auto-climbing" back onto the track after missing a jump.
+        // Ignore if we'd need to snap up more than allowed — ball fell through, keep falling
         if (snapUp > MAX_GROUND_SNAP_UP) {
           grounded = false
         } else {
-
           grounded = true
 
-          // Follow the ground surface smoothly (no jitter on slopes)
           if (prevGroundYRef.current != null) {
             lastGroundVyRef.current = (targetY - prevGroundYRef.current) / dt
           }
@@ -436,8 +408,7 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     }
 
     if (!grounded) {
-      // Leaving the ground: preserve upward slope momentum to make ramp launches feel natural.
-      // Skip if a jump was just buffered (jump velocity will take precedence).
+      // Preserve ramp launch momentum when leaving ground naturally (not jumping)
       if (wasOnGround && jumpBufferRef.current <= 0) {
         const launchVy = Math.max(0, lastGroundVyRef.current)
         if (launchVy > vel.y) vel.y = launchVy
@@ -445,11 +416,11 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       prevGroundYRef.current = null
     }
 
-    // 6b. Buffered jump resolution AFTER grounding is known (smooth land+jump)
+    // Buffered jump: resolves after grounding is confirmed for smooth land+jump
     const canJump = grounded || coyoteTimerRef.current > 0
     if (jumpBufferRef.current > 0 && canJump) {
       vel.y = JUMP_VELOCITY
-      pos.y += vel.y * dt // instantly apply jump velocity to remove visual delay
+      pos.y += vel.y * dt
       grounded = false
       coyoteTimerRef.current = 0
       jumpBufferRef.current = 0
@@ -458,19 +429,26 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
 
     onGroundRef.current = grounded
 
-    // 7. Update mesh position
     if (groupRef.current) {
       groupRef.current.position.copy(pos)
-      // Rolling rotation (visual only)
       groupRef.current.rotation.x -= fwd * dt * 0.8
       groupRef.current.rotation.z -= vel.x * dt * 0.5
     }
 
-    // 8. Obstacle collision (sphere vs AABB)
+    // Obstacle collision (sphere vs AABB).
+    // Grace period prevents instant death on spawn before meshes settle.
     if (aliveTimer.current > 0.4) {
       for (const obs of obstacleMeshes.current) {
         if (!obs.parent) continue
+
+        // Force world matrix update — avoids stale (0,0,0) positions on newly mounted meshes
+        obs.updateWorldMatrix(true, false)
         obs.getWorldPosition(obsWorldPos.current)
+
+        // Distance cull: skip obstacles far behind or ahead in Z
+        const ozDist = Math.abs(pos.z - obsWorldPos.current.z)
+        if (ozDist > 30) continue
+
         const geom = obs.geometry as THREE.BoxGeometry
         if (!geom.parameters) continue
         const { width, height, depth } = geom.parameters
@@ -486,7 +464,6 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         )
         obsBox.current.set(obsBoxMin.current, obsBoxMax.current)
 
-        // Closest point on box to ball center
         const closestX = Math.max(obsBoxMin.current.x, Math.min(pos.x, obsBoxMax.current.x))
         const closestY = Math.max(obsBoxMin.current.y, Math.min(pos.y, obsBoxMax.current.y))
         const closestZ = Math.max(obsBoxMin.current.z, Math.min(pos.z, obsBoxMax.current.z))
@@ -505,7 +482,7 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       }
     }
 
-    // 9. Death: fell off track (Y only — no lateral boundary, ball can fall off edges)
+    // Death: ball fell off the track
     if (aliveTimer.current > 0.8) {
       if (pos.y < -25) {
         if (!deadRef.current) {
@@ -516,11 +493,10 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
       }
     }
 
-    // 10. Report position
     _outPos.copy(pos)
     onPositionUpdate(_outPos)
 
-    // 11. Update HUD speed (throttled to avoid excessive store writes)
+    // Throttled HUD update to avoid excessive store writes
     hudTimer.current += dt
     if (hudTimer.current >= HUD_UPDATE_INTERVAL) {
       hudTimer.current = 0
@@ -528,11 +504,8 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
     }
   })
 
-  // ── Obstacle meshes are passed in, ignore cannon ──────────────────────────
-
   return (
     <group ref={groupRef}>
-      {/* Main ball */}
       {ballForm === 'normal' ? (
         <mesh castShadow>
           <sphereGeometry args={[BALL_RADIUS, 32, 32]} />
@@ -546,7 +519,6 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
         </mesh>
       ) : (
         <group>
-          {/* Core */}
           <mesh castShadow>
             <sphereGeometry args={[BALL_RADIUS * 0.85, 24, 24]} />
             <meshStandardMaterial
@@ -570,7 +542,6 @@ export function Ball({ level, onPositionUpdate, trackMeshes, obstacleMeshes }: B
           side={THREE.BackSide}
         />
       </mesh>
-      {/* Strong point light attached to ball */}
       <pointLight color={ballForm === 'spiky' ? '#ff3030' : '#00f5ff'} intensity={ballForm === 'spiky' ? 1.6 : 2} distance={8} />
     </group>
   )

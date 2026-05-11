@@ -1,17 +1,17 @@
-import type { LevelDef, TrackPiece } from './levels'
+import type { LevelDef } from './levels'
 
 export type CylinderObstacle = {
   id: string
   z: number
   angle: number // radians
-  arc: number   // radians (angular width)
+  arc: number   // angular width (radians)
   depth: number // world units along Z
 }
 
 export type CylinderSection = {
   startZ: number
   endZ: number
-  radius: number // cylinder inner radius (surface)
+  radius: number
   centerY: number
   surfaceY: number
   obstacles: CylinderObstacle[]
@@ -25,8 +25,8 @@ function wrapAngleRad(a: number) {
   return x
 }
 
+// Deterministic LCG for consistent obstacle layouts across sessions
 function makeRng(seed: number) {
-  // Deterministic LCG for consistent obstacle layouts.
   let s = seed >>> 0
   return () => {
     s = (1664525 * s + 1013904223) >>> 0
@@ -44,18 +44,20 @@ function buildCylinderObstacles(opts: {
   segmentLength: number
   segments: number
   radius: number
+  openSlots?: number           // how many adjacent slots to leave clear (default 4)
+  forceBottomObstacle?: boolean // always block the bottom slot (angle = -π/2 = slot 6 of 8)
 }) {
-  const { levelId, startZ, segmentLength: L, segments } = opts
+  const { levelId, startZ, segmentLength: L, segments, openSlots = 4, forceBottomObstacle = false } = opts
 
-  // Place obstacles on rings, leaving an open lane each time.
   const slotCount = 8
   const arc = (Math.PI * 2) / slotCount
-  const obstacleArc = arc * 0.62
+  const obstacleArc = arc * 0.45
   const depth = L * 0.65
+  // Slot 6 of 8 is angle = 6*(2π/8) = 3π/2 = -π/2 (bottom, where ball enters)
+  const bottomSlot = Math.round((3 * Math.PI / 2) / arc) % slotCount
 
   const rng = makeRng(levelId * 10007 + Math.round(Math.abs(startZ) * 17))
 
-  // Keep entry/exit clearer.
   const firstRing = 2
   const lastRing = Math.max(firstRing, segments - 3)
   const step = 2
@@ -63,9 +65,28 @@ function buildCylinderObstacles(opts: {
   const obstacles: CylinderObstacle[] = []
 
   for (let ring = firstRing; ring <= lastRing; ring += step) {
-    const safeSlot = randInt(rng, 0, slotCount - 1)
-    // 3 open slots clustered -> feels fair; rest blocked.
-    const open = new Set<number>([safeSlot, (safeSlot + 1) % slotCount, (safeSlot + slotCount - 1) % slotCount])
+    let safeSlot = randInt(rng, 0, slotCount - 1)
+    // If forceBottomObstacle, ensure safeSlot is not near the bottom slot.
+    // We only enforce this on the FIRST ring so the entry is blocked, 
+    // but the rest of the cylinder varies naturally and isn't all on one side.
+    if (forceBottomObstacle && ring === firstRing) {
+      const maxAttempts = 8
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const gap: number[] = []
+        for (let k = 0; k < openSlots; k++) gap.push((safeSlot + k) % slotCount)
+        gap.push((safeSlot + slotCount - 1) % slotCount)
+        if (!gap.includes(bottomSlot)) break
+        safeSlot = (safeSlot + 1) % slotCount
+      }
+    }
+
+    // Build the open set: openSlots adjacent slots starting at safeSlot
+    const open = new Set<number>()
+    for (let k = 0; k < openSlots; k++) {
+      open.add((safeSlot + k) % slotCount)
+    }
+    // Always keep one slot to the left of the gap for a smooth edge
+    open.add((safeSlot + slotCount - 1) % slotCount)
 
     for (let slot = 0; slot < slotCount; slot++) {
       if (open.has(slot)) continue
@@ -92,7 +113,7 @@ export function computeCylinderSections(level: LevelDef): CylinderSection[] {
   let surfaceStartY = 0
   let timelineIndex = 0
 
-  for (const piece of level.pieces as TrackPiece[]) {
+  for (const piece of level.pieces) {
     if (piece.kind === 'gap') {
       timelineIndex += piece.segments
       continue
@@ -127,11 +148,12 @@ export function computeCylinderSections(level: LevelDef): CylinderSection[] {
           segmentLength: L,
           segments: piece.segments,
           radius,
+          openSlots: piece.openSlots ?? 4,
+          forceBottomObstacle: piece.forceBottomObstacle ?? false,
         }),
       })
 
       timelineIndex += piece.segments
-      // Surface Y does not change through a cylinder section.
       continue
     }
   }
@@ -140,7 +162,7 @@ export function computeCylinderSections(level: LevelDef): CylinderSection[] {
 }
 
 export function isInsideCylinder(section: CylinderSection, z: number) {
-  // z decreases as you move forward.
+  // z decreases as the ball moves forward
   return z <= section.startZ && z >= section.endZ
 }
 

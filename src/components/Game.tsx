@@ -11,7 +11,9 @@ export function Game() {
   const { gameState, currentLevel } = useGame()
   const ballPosition = useRef(new THREE.Vector3(0, 3, 2))
 
-  // Shared mesh registries — populated by Track, consumed by Ball
+  // Shared mesh registries: Track fills them, Ball reads them.
+  // Track is always mounted so it registers meshes once on mount and they
+  // persist across runs. Obstacle meshes self-manage via onMeshReady/onMeshRemoved.
   const trackMeshes = useRef<THREE.Mesh[]>([])
   const obstacleMeshes = useRef<THREE.Mesh[]>([])
 
@@ -41,7 +43,7 @@ export function Game() {
       <Starfield ballPosition={ballPosition} />
 
       <Suspense fallback={null}>
-        {/* Track is always mounted so meshes are registered before ball spawns */}
+        {/* Track is always mounted so meshes register before the ball spawns */}
         <Track
           level={currentLevel}
           ballPosition={ballPosition}

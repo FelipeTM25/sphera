@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useGame } from '../store/gameStore'
+import { useGame, formatTime } from '../store/gameStore'
 import { LEVELS, type LevelId } from '../levels'
 
 function HomeIcon() {
@@ -27,6 +27,16 @@ function TrophyIcon() {
       <path d="M12 11v3" stroke="currentColor" strokeWidth="2" />
       <path d="M9 20h6" stroke="currentColor" strokeWidth="2" />
       <path d="M10 14h4l1 6H9l1-6Z" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function InfoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 16v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
@@ -60,17 +70,52 @@ function RibbonIcon() {
   )
 }
 
+// Inline star icon so no external deps needed
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="22" height="22" viewBox="0 0 24 24"
+      fill={filled ? '#ffd700' : 'none'}
+      stroke={filled ? '#f5a623' : 'rgba(255,255,255,0.25)'}
+      strokeWidth="1.5"
+      aria-hidden
+      style={{ filter: filled ? 'drop-shadow(0 0 4px #ffd70088)' : undefined }}
+    >
+      <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+    </svg>
+  )
+}
+
 function StarSlots({ value }: { value: number }) {
   return (
     <div className="star-slots">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className={i < value ? 'star-slot-sq filled' : 'star-slot-sq'} />
+        <StarIcon key={i} filled={i < value} />
       ))}
     </div>
   )
 }
 
-// Animated ball decoration for home screen
+function StarSlotsLarge({ value }: { value: number }) {
+  return (
+    <div className="star-slots-large">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <svg
+          key={i}
+          width="38" height="38" viewBox="0 0 24 24"
+          fill={i < value ? '#ffd700' : 'none'}
+          stroke={i < value ? '#f5a623' : 'rgba(255,255,255,0.2)'}
+          strokeWidth="1.5"
+          aria-hidden
+          style={{ filter: i < value ? 'drop-shadow(0 0 8px #ffd70099)' : undefined, transition: 'all 0.3s' }}
+        >
+          <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+        </svg>
+      ))}
+    </div>
+  )
+}
+
 function BallDecoration() {
   return (
     <div className="home-ball-wrap">
@@ -92,9 +137,11 @@ export function Menu() {
     goHome,
     openLevels,
     openRecords,
+    openCredits,
     selectLevel,
     startRun,
     retryLevel,
+    runStats,
   } = useGame()
 
   useEffect(() => {
@@ -111,14 +158,12 @@ export function Menu() {
 
   if (gameState === 'playing') return null
 
-  // ── HOME SCREEN ────────────────────────────────────────────────────────────
   if (gameState === 'home') {
     return (
       <div className="overlay">
         <div className="grid-bg" />
         <div className="mobile-panel home-panel">
 
-          {/* Hero area */}
           <div className="home-hero">
             <div className="home-hero-inner">
               <div className="game-title">SPHERA</div>
@@ -126,10 +171,8 @@ export function Menu() {
             </div>
           </div>
 
-          {/* Ball decoration */}
           <BallDecoration />
 
-          {/* Actions */}
           <div className="home-actions">
             <button id="btn-play" className="btn-mobile btn-mobile-primary" onClick={openLevels}>
               <PlayIcon size={20} />
@@ -140,13 +183,74 @@ export function Menu() {
               <TrophyIcon />
               <span>Récords</span>
             </button>
+
+            <button id="btn-credits" className="btn-mobile btn-mobile-ghost" onClick={openCredits}>
+              <InfoIcon />
+              <span>Créditos</span>
+            </button>
           </div>
         </div>
       </div>
     )
   }
 
-  // ── RECORDS ────────────────────────────────────────────────────────────────
+  if (gameState === 'credits') {
+    return (
+      <div className="overlay">
+        <div className="grid-bg" />
+        <div className="mobile-panel">
+          <div className="panel-topbar">
+            <button className="icon-btn" onClick={goHome} aria-label="Inicio">
+              <HomeIcon />
+            </button>
+            <div>
+              <div className="panel-h1">Créditos</div>
+              <div className="panel-h2">El equipo detrás de Sphera</div>
+            </div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="credits-section">
+            <div className="credits-role">Diseño y Desarrollo</div>
+            <div className="credits-name">Camilo Marín Muriel</div>
+            <div className="credits-name">Felipe Torres Montoya</div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="credits-section">
+            <div className="credits-role">Tecnologías</div>
+            <div className="credits-tech">React 19 · Three.js · TypeScript</div>
+            <div className="credits-tech">Web Audio API · Vite · R3F</div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="credits-section">
+            <div className="credits-role">Motor de Física</div>
+            <div className="credits-tech">Implementación manual con raycasting,</div>
+            <div className="credits-tech">AABB y sub-steps de simulación</div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="credits-footer">
+            <div className="credits-year">© 2025 · Sphera</div>
+            <div className="credits-tagline">¡Rueda y Sobrevive!</div>
+          </div>
+
+          <div className="action-stack" style={{ marginTop: '16px' }}>
+            <button className="btn-mobile btn-mobile-secondary" onClick={goHome}>
+              <HomeIcon />
+              <span>Volver al Inicio</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (gameState === 'records') {
     return (
       <div className="overlay">
@@ -181,7 +285,6 @@ export function Menu() {
     )
   }
 
-  // ── SELECT LEVEL ───────────────────────────────────────────────────────────
   if (gameState === 'levels') {
     return (
       <div className="overlay">
@@ -238,7 +341,6 @@ export function Menu() {
     )
   }
 
-  // ── LEVEL COMPLETE ─────────────────────────────────────────────────────────
   if (gameState === 'levelComplete') {
     const stars = runCollectedStars.filter(Boolean).length
     const nextId = (currentLevelId + 1) as LevelId
@@ -255,27 +357,25 @@ export function Menu() {
           <div className="panel-h2" style={{ textAlign: 'center' }}>Nivel {currentLevelId} superado</div>
 
           <div className="star-slots-large">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className={i < stars ? 'star-slot-sq filled' : 'star-slot-sq'} />
-            ))}
+            <StarSlotsLarge value={stars} />
           </div>
 
           <div className="stats-grid stats-grid-3">
             <div className="stat-box-large">
               <div className="label">PUNTUACIÓN</div>
-              <div className="value">2840</div>
+              <div className="value">{runStats.score.toLocaleString()}</div>
             </div>
             <div className="stat-box">
               <div className="label">Distancia</div>
-              <div className="value">450m</div>
+              <div className="value">{Math.round(runStats.distanceMeters)}m</div>
             </div>
             <div className="stat-box">
               <div className="label">Tiempo</div>
-              <div className="value">2:15</div>
+              <div className="value">{formatTime(runStats.elapsedSeconds)}</div>
             </div>
             <div className="stat-box">
-              <div className="label">Bonus</div>
-              <div className="value">+500</div>
+              <div className="label">Estrellas</div>
+              <div className="value">{runStats.stars} / 3</div>
             </div>
           </div>
 
@@ -303,7 +403,7 @@ export function Menu() {
     )
   }
 
-  // ── GAME OVER ──────────────────────────────────────────────────────────────
+  // Game Over
   return (
     <div className="overlay">
       <div className="grid-bg" />
@@ -312,23 +412,21 @@ export function Menu() {
         <div className="panel-h2" style={{ textAlign: 'center' }}>Nivel {currentLevelId}</div>
 
         <div className="star-slots-large" style={{ margin: '8px 0' }}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className={i < runCollectedStars.filter(Boolean).length ? 'star-slot-sq filled' : 'star-slot-sq'} />
-          ))}
+          <StarSlotsLarge value={runCollectedStars.filter(Boolean).length} />
         </div>
 
         <div className="stats-grid">
           <div className="stat-box-large">
             <div className="label">PUNTUACIÓN FINAL</div>
-            <div className="value">1250</div>
+            <div className="value">{runStats.score.toLocaleString()}</div>
           </div>
           <div className="stat-box">
             <div className="label">Distancia</div>
-            <div className="value">127m</div>
+            <div className="value">{Math.round(runStats.distanceMeters)}m</div>
           </div>
           <div className="stat-box">
             <div className="label">Tiempo</div>
-            <div className="value">0:45</div>
+            <div className="value">{formatTime(runStats.elapsedSeconds)}</div>
           </div>
         </div>
 

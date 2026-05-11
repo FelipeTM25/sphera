@@ -1,18 +1,12 @@
 import { useEffect, useRef } from 'react'
 
-/**
- * Unified input: keyboard + touch.
- * Returns a ref to a Set of active "action codes" (same as KeyboardEvent.code)
- * so Ball.tsx can stay keyboard-code-based while touch works too.
- *
- * Jump fix: touch 'Space' adds key to the Set, and the game loop natively 
- * handles edge triggers via wasJumpHeldRef.
- */
+// Unified keyboard + touch input.
+// Returns a ref to a Set of active key codes (KeyboardEvent.code strings).
+// Touch zones: top 45% = Space (jump), bottom-left = ArrowLeft, bottom-right = ArrowRight.
 export function useInput() {
   const keys = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    // ── Keyboard ──────────────────────────────────────────────────────────────
     const onKeyDown = (e: KeyboardEvent) => {
       keys.current.add(e.code)
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) {
@@ -24,8 +18,6 @@ export function useInput() {
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
 
-    // ── Touch ─────────────────────────────────────────────────────────────────
-    // Layout: top 40% of screen = jump (Space pulse), bottom-left = ArrowLeft, bottom-right = ArrowRight
     const getDirection = (touch: Touch): string => {
       if (touch.clientY < window.innerHeight * 0.45) return 'Space'
       return touch.clientX < window.innerWidth / 2 ? 'ArrowLeft' : 'ArrowRight'
@@ -61,7 +53,7 @@ export function useInput() {
         const dir = activeTouches.get(t.identifier)
         if (dir) {
           activeTouches.delete(t.identifier)
-          // Only remove if no other touch still holds same direction
+          // Keep the key active if another touch still holds the same direction
           const stillHeld = [...activeTouches.values()].includes(dir)
           if (!stillHeld) keys.current.delete(dir)
         }

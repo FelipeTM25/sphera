@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 
+// Keyboard-only input hook (used where touch isn't needed)
 export function useKeys() {
   const keys = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current.add(e.code)
-      // prevent page scroll
       if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) {
         e.preventDefault()
       }

@@ -340,8 +340,6 @@ body {
   background: transparent;
   color: rgba(255,255,255,0.45);
   border: 1px solid rgba(255,255,255,0.1);
-  font-size: 12px;
-  padding: 12px 24px;
 }
 
 /* ─── Panel top bar ──────────────────────────────────────────────────────────── */
@@ -585,6 +583,65 @@ body {
   width: 100%;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
+}
+
+/* ─── Credits ────────────────────────────────────────────────────────────────── */
+.credits-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.credits-role {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  font-weight: 600;
+}
+
+.credits-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.credits-tech {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 0.5px;
+}
+
+.credits-footer {
+  text-align: center;
+  width: 100%;
+}
+
+.credits-year {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: rgba(255,255,255,0.3);
+}
+
+.credits-tagline {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--neon-cyan);
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.btn-mobile-ghost:hover {
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.65);
 }
 
 /* ─── Game title ─────────────────────────────────────────────────────────────── */

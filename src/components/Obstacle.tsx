@@ -10,13 +10,12 @@ interface ObstacleProps {
   onMeshRemoved?: (mesh: THREE.Mesh) => void
 }
 
-// Color palette per obstacle type — each type has a unique visual language
 const OBSTACLE_CONFIG: Record<ObstacleType, { color: string; emissiveIntensity: number; rotationX?: number }> = {
   wall:     { color: '#ff2020', emissiveIntensity: 0.7 },
   pillar:   { color: '#ff2020', emissiveIntensity: 0.7 },
   gate:     { color: '#ff6600', emissiveIntensity: 0.6 },
   low_wall: { color: '#ffcc00', emissiveIntensity: 0.9 },
-  ramp:     { color: '#39ff14', emissiveIntensity: 0.8, rotationX: 0.45 },  // +0.45 = low at approach, high at exit
+  ramp:     { color: '#39ff14', emissiveIntensity: 0.8, rotationX: 0.45 },
   barrier:  { color: '#c000ff', emissiveIntensity: 0.7 },
 }
 
@@ -35,14 +34,11 @@ export function Obstacle({ position, size, type, onMeshReady, onMeshRemoved }: O
   const color = cfg.color
   const rotX = cfg.rotationX ?? 0
 
-  // low_wall gets an extra "SALTA" indicator strip on top
   const isLowWall = type === 'low_wall'
-  // ramp is rotated to look like an actual ramp
   const isRamp = type === 'ramp'
 
   return (
     <group position={position} rotation={[rotX, 0, 0]}>
-      {/* Main obstacle mesh — registered for collision */}
       <mesh ref={meshRef} castShadow>
         <boxGeometry args={size} />
         <meshStandardMaterial
@@ -54,13 +50,12 @@ export function Obstacle({ position, size, type, onMeshReady, onMeshRemoved }: O
         />
       </mesh>
 
-      {/* Outer glow shell */}
       <mesh scale={[1.15, 1.15, 1.15]}>
         <boxGeometry args={size} />
         <meshBasicMaterial color={color} transparent opacity={0.08} side={THREE.BackSide} />
       </mesh>
 
-      {/* low_wall: pulsing yellow stripe on top to scream "JUMP!" */}
+      {/* White stripe on top signals "JUMP!" to the player */}
       {isLowWall && (
         <mesh position={[0, size[1] / 2 + 0.08, 0]}>
           <boxGeometry args={[size[0], 0.12, size[2] * 0.9]} />
@@ -68,7 +63,7 @@ export function Obstacle({ position, size, type, onMeshReady, onMeshRemoved }: O
         </mesh>
       )}
 
-      {/* ramp: arrow chevron on surface to indicate direction */}
+      {/* Arrow chevrons show ramp direction */}
       {isRamp && (
         <>
           <mesh position={[0, size[1] / 2 + 0.05, -size[2] * 0.25]}>
