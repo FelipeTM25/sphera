@@ -153,5 +153,5 @@ El juego corre en `http://localhost:5173` por defecto.
 - Camilo Marín Muriel
 - Felipe Torres Montoya
 
-© 2025 · Sphera - ¡Rueda y Sobrevive!
+© 2026 · Sphera - ¡Rueda y Sobrevive!
 
