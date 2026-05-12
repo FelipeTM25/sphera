@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.felipetm25.sphera',
+  appId: 'com.sphera.game',
   appName: 'Sphera',
   webDir: 'dist'
 };

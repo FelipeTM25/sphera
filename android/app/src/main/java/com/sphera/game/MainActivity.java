@@ -1,4 +1,4 @@
-package com.felipetm25.sphera;
+package com.sphera.game;
 
 import com.getcapacitor.BridgeActivity;
 
