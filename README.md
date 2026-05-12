@@ -31,6 +31,7 @@ Inspirado en el clásico *Slope*, construido completamente con tecnologías web 
 | **@react-three/fiber** | 9 | Integración React + Three.js |
 | **@react-three/drei** | 10 | Helpers para fiber |
 | **Web Audio API** | — | Música procedural y efectos de sonido |
+| **Capacitor** | 7 | Empaquetado nativo para Android / iOS |
 
 ---
 
@@ -143,3 +144,14 @@ El juego corre en `http://localhost:5173` por defecto.
 - **Registries de meshes**: `Game.tsx` mantiene arrays `trackMeshes` y `obstacleMeshes` que se limpian al inicio de cada run para evitar colisiones fantasma por meshes stale del ciclo anterior.
 - **Colisiones**: el suelo se detecta con un `Raycaster` descendente; los obstáculos usan AABB (sphere-vs-box) con distance culling de ±30 unidades en Z.
 - **Cinemática de cámara**: `CameraController` blendea suavemente entre encuadre normal y encuadre del túnel usando smoothstep + exponential lerp FPS-independent.
+
+---
+
+## 👥 Créditos y Autores
+
+**Diseño y Desarrollo**
+- Camilo Marín Muriel
+- Felipe Torres Montoya
+
+© 2025 · Sphera - ¡Rueda y Sobrevive!
+

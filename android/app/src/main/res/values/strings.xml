@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sphera</string>
+    <string name="title_activity_main">Sphera</string>
+    <string name="package_name">com.felipetm25.sphera</string>
+    <string name="custom_url_scheme">com.felipetm25.sphera</string>
+</resources>
